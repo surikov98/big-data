@@ -2,10 +2,16 @@ import json
 import traceback
 
 from http import HTTPStatus
+
+import requests
 from lxml.html import fromstring
 from pymongo import MongoClient
 from time import sleep
 from tqdm import tqdm
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+import time
+from selenium.common.exceptions import NoSuchElementException
 from typing import Union
 
 from .errors import CaptchaError, ConnectionError, DBConnectionError
@@ -17,27 +23,29 @@ BASE_URL = 'https://www.litres.ru'
 BOOKS_PER_PAGE = 50
 
 _HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/85.0.4183.121 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ru,en-us;q=0.7,en;q=0.3',
-        'Accept-Encoding': 'deflate',
-        'Accept-Charset': 'windows-1251,utf-8;q=0.7,*;q=0.7',
-        'Keep-Alive': '300',
-        'Connection': 'keep-alive',
-        'Referer': 'https://www.litres.ru/',
-        'Cookie': 'user-geo-region-id=2; user-geo-country-id=2; desktop_session_key=a879d130e3adf0339260b581e66d773df11'
-                  'd8e9d3c7ea1053a6a7b473c166afff28b4d6c3e80e91249baaa7f3c3e90ef898a714ba131694d595c6a4f7e8f6df19d46c31'
-                  'ce10d2837ff5ad61d138aefd65c01aa7acc1327ce6d0918deae0a3c71; '
-                  'desktop_session_key.sig=drC4D-uw685k9LLTsxPhIFVyLFY; '
-                  'i=Hn0YWarMxO/96XpUg9b7btBjrSjo+ItWSfeOXC4oUOtwp6TEcbOkk/ajoJbz1xD/0dPkdWRcJTTk3x1/kZ09uNlji8g=; '
-                  'mda_exp_enabled=1; sso_status=sso.passport.yandex.ru:blocked; yandex_plus_metrika_cookie=true; '
-                  '_ym_wasSynced=%7B%22time%22%3A1604668139580%2C%22params%22%3A%7B%22eu%22%3A0%7D%2C%22bkParams%22%3A%'
-                  '7B%7D%7D; gdpr=0; _ym_uid=1604668140171070080; _ym_d=1604668140; mda=0; _ym_isad=1; '
-                  '_ym_visorc_56177992=b; _ym_visorc_52332406=b; _ym_visorc_22663942=b; location=1',
-    }
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/85.0.4183.121 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'ru,en-us;q=0.7,en;q=0.3',
+    'Accept-Encoding': 'deflate',
+    'Accept-Charset': 'windows-1251,utf-8;q=0.7,*;q=0.7',
+    'Keep-Alive': '300',
+    'Connection': 'keep-alive',
+    'Referer': 'https://www.litres.ru/',
+    'Cookie': 'user-geo-region-id=2; user-geo-country-id=2; desktop_session_key=a879d130e3adf0339260b581e66d773df11'
+              'd8e9d3c7ea1053a6a7b473c166afff28b4d6c3e80e91249baaa7f3c3e90ef898a714ba131694d595c6a4f7e8f6df19d46c31'
+              'ce10d2837ff5ad61d138aefd65c01aa7acc1327ce6d0918deae0a3c71; '
+              'desktop_session_key.sig=drC4D-uw685k9LLTsxPhIFVyLFY; '
+              'i=Hn0YWarMxO/96XpUg9b7btBjrSjo+ItWSfeOXC4oUOtwp6TEcbOkk/ajoJbz1xD/0dPkdWRcJTTk3x1/kZ09uNlji8g=; '
+              'mda_exp_enabled=1; sso_status=sso.passport.yandex.ru:blocked; yandex_plus_metrika_cookie=true; '
+              '_ym_wasSynced=%7B%22time%22%3A1604668139580%2C%22params%22%3A%7B%22eu%22%3A0%7D%2C%22bkParams%22%3A%'
+              '7B%7D%7D; gdpr=0; _ym_uid=1604668140171070080; _ym_d=1604668140; mda=0; _ym_isad=1; '
+              '_ym_visorc_56177992=b; _ym_visorc_52332406=b; _ym_visorc_22663942=b; location=1',
+}
 
 _BUFFER_SIZE = BOOKS_PER_PAGE
+_FILE_WITH_HREF_NAME = './connector/configs/all_links.txt'
+_CHECKPOINT_FILE_NAME = './connector/configs/checkpoint.txt'
 
 
 class Connector:
@@ -59,6 +67,9 @@ class Connector:
         self._current_book_page = self._current_book = None
         self._pages_count = None
         self._books_ids = None
+        self._current_page_link = None
+        self._current_page_number = None
+        self._file_with_href = None
 
         self._check_fields()
 
@@ -72,7 +83,6 @@ class Connector:
 
     def _check_fields(self):
         field_types = {
-            '_api_key': [str],
             '_username': [str, type(None)],
             '_password': [str, type(None)],
             '_database': [str],
@@ -108,7 +118,7 @@ class Connector:
             self._book_links = set()
             if not is_clear_database and 'books' in collections:
                 # TODO: bookId replace
-                self._book_links = set(book['data']['bookId'] for book in self._db.books.find())
+                self._book_links = set(book['key'] for book in self._db.books.find())
         except Exception:
             raise DBConnectionError('data from database initialization failed') from None
         self._book_buffer = InsertBuffer(self._db.books, _BUFFER_SIZE, self._update_log)
@@ -128,50 +138,57 @@ class Connector:
             raise Exception(f'Unknown error: {response.status_code}; {response.text}')
 
     def _get_book_links(self):
-        # self._current_book_page = self._start_book_page
-        # request_url = 'https://www.kinopoisk.ru/lists/navigator/?page=%s&quick_filters=books&tab=all'
-        # if self._sorting is not None:
-        #     request_url += f'&sort={self._sorting}'
-        # while True:
-        #     self._current_book = self._start_book if self._current_book_page == self._start_book_page else 1
-        #     books_page = self._make_request(request_url % self._current_book_page)
-        #     if books_page is None:
-        #         break
-        #
-        #     self._pages_count = int(books_page.xpath("//a[@class='paginator__page-number']/text()")[-1])
-        #     books_links = books_page.xpath("//a[@class='selection-book-item-meta__link']/@href")
-        #     books_count = len(books_links)
-        #
-        #     is_end = self._current_book_page == self._end_book_page or self._current_book_page >= self._pages_count
-        #     start_book = self._current_book
-        #     end_book = self._end_book if self._current_book_page == self._end_book_page else books_count
-        #     bar_desc = f'page: {self._current_book_page}/{self._pages_count}'
-        #     bar = tqdm(books_links[start_book - 1:end_book + 1], initial=start_book - 1, ascii=True,
-        #                total=end_book - start_book + 1, desc=bar_desc)
-        #     for i, book_link in enumerate(bar):
-        #         self._current_book = i + start_book
-        #         book_id = int(book_link.replace('/', ' ').strip().split()[-1])
-        #         bar.set_description(f'{bar_desc}; bookId: {book_id}')
-        #         self._update_log(f'page: {self._current_book_page}/{self._pages_count}; '
-        #                          f'book: {self._current_book}/{books_count}; bookId: {book_id}')
-        #         yield book_id
-        #
-        #     if is_end:
-        #         break
-        #     self._current_book_page += 1
+        def check_exists_captcha(driver):
+            try:
+                driver.find_element(By.CLASS_NAME, "litres_captcha_page")
+                return True
+            except NoSuchElementException:
+                return False
 
-        # TODO: generator selenium here
-        yield 0
+        with open(_CHECKPOINT_FILE_NAME, 'r') as checkpoint_file:
+            self._current_page_link = checkpoint_file.readline().strip()
+            self._current_page_number = int(checkpoint_file.readline())
 
-    def _get_book_links_from_file(self, file_object):
-        # TODO: generator reading from file
-        yield 0
+        driver = webdriver.Firefox()
 
-    def _get_book(self, book_link):
-        book_data = self._make_request(f'{BASE_URL}{book_link}')
+        while True:
+            try:
+                driver.get(self._current_page_link)
+                if check_exists_captcha(driver):
+                    print("Captcha! Waiting for manual handling")
+                    time.sleep(120)
+                    print('Captcha managed')
+                    driver.get(self._current_page_link)
+
+                content_books_names = driver.find_elements(By.CLASS_NAME, "art__name")  # названия книги
+                time.sleep(1)
+
+                for book in content_books_names:
+                    [elements] = book.find_elements(By.TAG_NAME, "a")
+                    yield elements.get_attribute("href")
+                time.sleep(1)
+            except NoSuchElementException:
+                print('Go to the next page...')
+
+            self._current_page_number += 1
+
+            self._current_page_link = f"https://www.litres.ru/novie/elektronnie-knigi/page-" \
+                                      f"{self._current_page_number}/?lang=52"
+
+    def _get_book_links_from_file(self, input_file):
+        if isinstance(input_file, str):
+            try:
+                self._file_with_href = open(input_file, 'r')
+                return (line.strip() for line in self._file_with_href)
+            except FileNotFoundError:
+                print(f'file with name {input_file} not found')
+        return (line for line in input_file)
+
+    def _get_book(self, book_key):
+        book_data = self._make_request(f'{BASE_URL}{book_key}')
         # TODO: add code to parse page
         if book_data is None:
-            self._update_log(f"Can't find information about book {book_link}")
+            self._update_log(f"Can't find information about book {book_key}")
             return None
         self._update_log('book was got')
         return book_data
@@ -215,25 +232,32 @@ class Connector:
         self._start_book = start_book
         self._end_book = end_book
 
-        generator = self._get_book_links_from_file if is_from_file else self._get_book_links
+        generator = self._get_book_links_from_file(_FILE_WITH_HREF_NAME) if is_from_file else self._get_book_links()
 
         try:
-            for book_link in generator():
-                if book_link in self._book_links:
-                    self._update_log(f'book {book_link} has been already gotten')
+            for book_link in generator:
+                book_key = book_link.replace(BASE_URL, '')
+                if book_key in self._book_links:
+                    self._update_log(f'book {book_key} has been already gotten')
                     continue
 
-                book_data = self._get_book(book_link)
+                book_data = self._get_book(book_key)
                 if book_data is None:
                     continue
 
                 self._book_buffer.add(book_data)
                 self._book_links.add(book_link)
+            if self._file_with_href is not None:
+                self._file_with_href.close()
         except DBConnectionError as exc:
             self._process_db_connection_error()
+            if self._file_with_href is not None:
+                self._file_with_href.close()
             raise exc from None
         except (ConnectionError, ValueError, CaptchaError, KeyboardInterrupt, Exception) as exc:
             self._flush_buffer()
+            if self._file_with_href is not None:
+                self._file_with_href.close()
             raise exc from None
 
         self._flush_buffer()
