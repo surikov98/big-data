@@ -10,3 +10,4 @@ pyspark
 requests
 scipy
 tqdm
+beautifulsoup4
