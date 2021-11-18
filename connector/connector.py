@@ -245,6 +245,22 @@ class Connector:
         book_dict.update({} if paper_price is None else {
             'paper_price': int(re.sub('Цена бумажной версии', '', paper_price.text).strip()[:-2])})
 
+        volume_info = soup.find('li', {'class': 'volume'})
+        volume = re.search(r'Объем:(.+?)стр', volume_info.text).group(1)
+        book_dict.update({} if volume is None else {'volume': int(volume.strip())})
+
+        genre_info = soup.find('div', {'class': 'ab-container breadcrumbs-container'})
+        book_dict.update({} if genre_info is None else {
+            'genre': str(genre_info.find_all('li', {'class': 'breadcrumbs__item'})[1].text)})
+
+        award = soup.find('a', {'class': 'badge flag_best'})
+        award_bestseller = award.find('span', {'class': 'flag_text'})
+        book_dict.update({} if award_bestseller is None else {'award_bestseller': award_bestseller.text})
+
+        award = soup.find('a', {'class': 'badge flag_hit'})
+        award_hit = award.find('span', {'class': 'flag_text'})
+        book_dict.update({} if award_hit is None else {'award_hit': award_hit.text})
+
         self._update_log('book was got')
         return book_dict
 
