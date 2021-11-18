@@ -164,8 +164,8 @@ class Connector:
                 time.sleep(1)
 
                 for book in content_books_names:
-                    [elements] = book.find_elements(By.TAG_NAME, "a")
-                    yield elements.get_attribute("href")
+                    element = book.find_element(By.TAG_NAME, "a")
+                    yield element.get_attribute("href")
                 time.sleep(1)
             except NoSuchElementException:
                 print('Go to the next page...')
