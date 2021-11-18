@@ -69,31 +69,13 @@ while count_links < 2:
         except:
             print("Количество оценок ЛитРес:", None)
             book_dict['votes_count_litres'] = None
-        
-        try:
-            content_mark = soup.find('div', {'class': 'art-rating-unit rating-source-livelib rating-popup-launcher'})
-            average_rating = content_mark.find('div', {'class': 'rating-number bottomline-rating'}).text
-            print("Средняя оценка LiveLib:", average_rating)
-            book_dict['average_rating_litres'] = float(average_rating.replace(',', '.'))   
-        except:
-            print("Средняя оценка LiveLib:", None)
-            book_dict['average_rating_litres'] = None
-            
-        try:
-            votes_count = content_mark.find('div', {'class': 'votes-count bottomline-rating-count'}).text
-            print("Количество оценок LiveLib:", votes_count)  
-            book_dict['votes_count_litres'] = int(votes_count)
-        except:
-            print("Количество оценок LiveLib:", None)
-            book_dict['votes_count_litres'] = None
-       
 
         try:
             subscr = soup.find('div', {'class': 'get_book_by_subscr'})
             #print(subscr.text)
             subscr_price = re.sub('Взять по абонементу за', '', subscr.text)
             subscr_price = subscr_price.strip()[:-2]
-            print('Взять по абонементу за',subscr_price)
+            print('Взять по абонементу за', subscr_price)
             book_dict['subscr_price'] = int(subscr_price)
         except:
             print('Взять по абонементу за',None)

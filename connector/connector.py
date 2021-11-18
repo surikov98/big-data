@@ -3,6 +3,7 @@ import traceback
 
 from http import HTTPStatus
 
+from bs4 import BeautifulSoup
 import requests
 from lxml.html import fromstring
 from pymongo import MongoClient
@@ -117,7 +118,6 @@ class Connector:
         try:
             self._book_links = set()
             if not is_clear_database and 'books' in collections:
-                # TODO: bookId replace
                 self._book_links = set(book['key'] for book in self._db.books.find())
         except Exception:
             raise DBConnectionError('data from database initialization failed') from None
@@ -185,13 +185,34 @@ class Connector:
         return (line for line in input_file)
 
     def _get_book(self, book_key):
-        book_data = self._make_request(f'{BASE_URL}{book_key}')
-        # TODO: add code to parse page
+        #book_data = self._make_request(f'{BASE_URL}{book_key}')
+        book_data = requests.get(f'{BASE_URL}{book_key}')
         if book_data is None:
             self._update_log(f"Can't find information about book {book_key}")
             return None
+
+        soup = BeautifulSoup(book_data.text.encode('utf-8'), features="html.parser")
+
+        book_dict = {"key": book_key}
+
+        author = soup.find('a', class_='biblio_book_author__link')
+        book_dict.update({} if author is None else {'author': author.text})
+
+        book_name = soup.find('h1', itemprop='name')
+        book_dict.update({} if book_name is None else {'book_name': book_name.text})
+
+        content_mark = soup.find('div', class_='art-rating-unit rating-source-litres rating-popup-launcher')
+        average_rating = content_mark.find('div', class_='rating-number bottomline-rating') \
+            if content_mark is not None else None
+        book_dict.update({} if average_rating is None else {'average_rating_litres': float(average_rating.text
+                                                                                           .replace(',', '.'))})
+
+        votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
+            if content_mark is not None else None
+        book_dict.update({} if votes_count is None else {'votes_count_litres': int(votes_count.text)})
+
         self._update_log('book was got')
-        return book_data
+        return book_dict
 
     def _update_log(self, log_message):
         if self._log_file is not None:
