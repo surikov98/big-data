@@ -20,6 +20,8 @@ from .insert_buffer import InsertBuffer
 from .request import Request
 from utils import get_uri_mongodb
 
+import re
+
 BASE_URL = 'https://www.litres.ru'
 BOOKS_PER_PAGE = 50
 
@@ -219,6 +221,29 @@ class Connector:
         votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
             if content_mark is not None else None
         book_dict.update({} if votes_count is None else {'votes_count_livelib': int(votes_count.text)})
+
+        recenses = soup.find('div', {'class': 'recenses-count'})
+        recenses_count = recenses.find('div', {'class': 'rating-text-wrapper'})
+        book_dict.update({} if recenses_count is None else {'recenses_count': int(recenses_count.text)})
+
+        subscr = soup.find('div', {'class': 'get_book_by_subscr'})
+        book_dict.update({} if subscr is None else {
+            'subscr_price': int(re.sub('Взять по абонементу за', '', subscr.text).strip()[:-2])})
+
+        buy = soup.find('div', {'class': 'biblio_book_buy_block'})
+        buy_price = buy.find('span', {'class': 'simple-price'})
+        book_dict.update({} if buy_price is None else {
+            'buy_price': int(re.sub('Купить и скачать за', '', buy_price.text).strip()[:-2])})
+
+        audio = soup.find('span', {'class': 'type type_audio'})
+        audio_price = audio.find('span', {'class': 'simple-price'})
+        book_dict.update({} if audio_price is None else {
+            'audio_price': int(re.sub('Цена аудиокниги', '', audio_price.text).strip()[:-2])})
+
+        paper = soup.find('span', {'class': 'type type_hardcopy'})
+        paper_price = paper.find('span', {'class': 'simple-price'})
+        book_dict.update({} if paper_price is None else {
+            'paper_price': int(re.sub('Цена бумажной версии', '', paper_price.text).strip()[:-2])})
 
         self._update_log('book was got')
         return book_dict
