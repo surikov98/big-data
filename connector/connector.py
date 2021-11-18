@@ -261,6 +261,7 @@ class Connector:
         award_hit = award.find('span', {'class': 'flag_text'})
         book_dict.update({} if award_hit is None else {'award_hit': award_hit.text})
 
+
         self._update_log('book was got')
         return book_dict
 
