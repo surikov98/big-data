@@ -211,6 +211,16 @@ class Connector:
             if content_mark is not None else None
         book_dict.update({} if votes_count is None else {'votes_count_litres': int(votes_count.text)})
 
+        content_mark = soup.find('div', class_='art-rating-unit rating-source-livelib rating-popup-launcher')
+        average_rating = content_mark.find('div', class_='rating-number bottomline-rating') \
+            if content_mark is not None else None
+        book_dict.update(
+            {} if average_rating is None else {'average_rating_livelib': float(average_rating.text.replace(',', '.'))})
+
+        votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
+            if content_mark is not None else None
+        book_dict.update({} if votes_count is None else {'votes_count_livelib': int(votes_count.text)})
+
         self._update_log('book was got')
         return book_dict
 
