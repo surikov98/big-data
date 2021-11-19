@@ -222,8 +222,9 @@ class Connector:
             if content_mark is not None else None
         book_dict.update({} if votes_count is None else {'votes_count_livelib': int(votes_count.text)})
 
-        recenses = soup.find('div', class_ = 'recenses-count')
-        recenses_count = recenses.find('div', class_ = 'rating-text-wrapper')
+        recenses = soup.find('div', class_='recenses-count')
+        recenses_count = recenses.find('div', class_='rating-text-wrapper') \
+            if recenses is not None else None
         book_dict.update({} if recenses_count is None else {'recenses_count': int(recenses_count.text)})
 
         subscr = soup.find('div', class_ = 'get_book_by_subscr')
@@ -231,22 +232,26 @@ class Connector:
             'subscr_price': int(re.sub('Взять по абонементу за', '', subscr.text).strip()[:-2])})
 
         buy = soup.find('div', class_ = 'biblio_book_buy_block')
-        buy_price = buy.find('span', class_ = 'simple-price')
+        buy_price = buy.find('span', class_='simple-price') \
+            if buy is not None else None
         book_dict.update({} if buy_price is None else {
             'buy_price': int(re.sub('Купить и скачать за', '', buy_price.text).strip()[:-2])})
 
         audio = soup.find('span', class_ = 'type type_audio')
-        audio_price = audio.find('span', class_ = 'simple-price')
+        audio_price = audio.find('span', class_='simple-price') \
+            if audio is not None else None
         book_dict.update({} if audio_price is None else {
             'audio_price': int(re.sub('Цена аудиокниги', '', audio_price.text).strip()[:-2])})
 
         paper = soup.find('span', class_ = 'type type_hardcopy')
-        paper_price = paper.find('span', class_ = 'simple-price')
+        paper_price = paper.find('span', class_='simple-price') \
+            if paper is not None else None
         book_dict.update({} if paper_price is None else {
             'paper_price': int(re.sub('Цена бумажной версии', '', paper_price.text).strip()[:-2])})
 
         volume_info = soup.find('li', class_ = 'volume')
-        volume = re.search(r'Объем:(.+?)стр', volume_info.text).group(1)
+        volume = re.search(r'Объем:(.+?)стр', volume_info.text).group(1) \
+            if volume_info is not None else None
         book_dict.update({} if volume is None else {'volume': int(volume.strip())})
 
         genre_info = soup.find('div', class_ = 'ab-container breadcrumbs-container')
@@ -254,11 +259,13 @@ class Connector:
             'genre': str(genre_info.find_all('li', {'class': 'breadcrumbs__item'})[1].text)})
 
         award = soup.find('a', class_ = 'badge flag_best')
-        award_bestseller = award.find('span', class_ = 'flag_text')
+        award_bestseller = award.find('span', class_='flag_text') \
+            if award is not None else None
         book_dict.update({} if award_bestseller is None else {'award_bestseller': award_bestseller.text})
 
         award = soup.find('a', class_ = 'badge flag_hit')
-        award_hit = award.find('span', class_ = 'flag_text')
+        award_hit = award.find('span', class_='flag_text') \
+            if award is not None else None
         book_dict.update({} if award_hit is None else {'award_hit': award_hit.text})
 
 
