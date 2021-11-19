@@ -269,6 +269,83 @@ class Connector:
             if award is not None else None
         book_dict.update({} if award_hit is None else {'award_hit': award_hit.text})
 
+        mark = soup.find('a', class_='badge flag_free')
+        mark_free = mark.find('span', class_='flag_text') \
+            if mark is not None else None
+        book_dict.update({} if mark_free is None else {'mark_free': mark_free.text})
+
+        mark = soup.find('div', class_='biblio_book_text_preorder_info')
+        book_dict.update({} if mark is None else {'mark_not_available': mark.text})
+
+        cit = soup.find('span', class_='quotes__count')
+        book_dict.update({} if cit is None else {'citations': int(cit.text.strip())})
+
+        description = soup.find('div', class_='biblio_book_descr_publishers')
+        book_dict.update({} if description is None else {'description': description.text.replace('\xa0', '\x20')})
+
+        blocks = soup.find('div', class_='biblio_book_info_detailed')
+        part1 = blocks.find('ul', class_='biblio_book_info_detailed_left') \
+            if blocks is not None else None
+        elements_left = part1.find_all('li') \
+            if part1 is not None else None
+        part2 = blocks.find('ul', class_='biblio_book_info_detailed_right') \
+            if blocks is not None else []
+        elements_right = part2.find_all('li') \
+            if part2 is not None else []
+
+        elements = elements_left + elements_right
+
+        for elem in elements:
+            age_name = None
+            if (elem.text.startswith('Возрастное ограничение')):
+                age_name = elem.text
+                break
+        book_dict.update({} if age_name is None else {
+            'age': int(re.sub('\+', '', re.sub('Возрастное ограничение:', '', age_name)).strip())})
+
+        for elem in elements:
+            date = None
+            if (elem.text.startswith('Дата выхода на ЛитРес')):
+                date = elem.text
+                break
+        book_dict.update(
+            {} if date is None else {'date_litres': int(re.sub('Дата выхода на ЛитРес:', '', date).strip()[-4:])})
+
+        for elem in elements:
+            date = None
+            if (elem.text.startswith('Дата написания')):
+                date = elem.text
+                break
+        book_dict.update(
+            {} if date is None else {'date_writing': int(re.sub('Дата написания:', '', date).strip()[-4:])})
+
+        for elem in elements:
+            date = None
+            if (elem.text.startswith('Дата перевода')):
+                date = elem.text
+                break
+        book_dict.update({} if date is None else {'translate': int(re.sub('Дата перевода:', '', date).strip()[-4:])})
+
+        for elem in elements:
+            translator = None
+            if (elem.text.startswith('Переводчик')):
+                translator = elem.text
+                break
+        book_dict.update({} if translator is None else {'translator': re.sub('Переводчик:', '', translator).strip()})
+
+        for elem in elements:
+            isbn = None
+            if (elem.text.startswith('ISBN')):
+                isbn = elem.text
+                break
+        book_dict.update({} if isbn is None else {'isbn': re.sub('ISBN:', '', isbn).strip()})
+
+        for elem in elements:
+            rights = None
+            if (elem.text.startswith('Правообладатель')):
+                rights = elem.text
+                break
+        book_dict.update({} if rights is None else {'rights': re.sub('Правообладатель:', '', rights).strip()})
 
         self._update_log('book was got')
         return book_dict
