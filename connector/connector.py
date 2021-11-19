@@ -227,9 +227,10 @@ class Connector:
             if recenses is not None else None
         book_dict.update({} if recenses_count is None else {'recenses_count': int(recenses_count.text)})
 
-        subscr = soup.find('div', class_ = 'get_book_by_subscr')
-        book_dict.update({} if subscr is None else {
-            'subscr_price': int(re.sub('Взять по абонементу за', '', subscr.text).strip()[:-2])})
+        subscr = soup.find('div', class_='get_book_by_subscr')
+        book_dict.update({} if subscr is None else {'subscr_price': 'Не указана'} if (
+                    len(subscr.text) < len('Взять по абонементу за')) else {
+            'subscr_price': int(re.sub(r'Взять по абонементу за', '', subscr.text).strip()[:-2])})
 
         buy = soup.find('div', class_ = 'biblio_book_buy_block')
         buy_price = buy.find('span', class_='simple-price') \
