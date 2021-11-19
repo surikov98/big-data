@@ -1,14 +1,8 @@
-import json
-import traceback
-
 from http import HTTPStatus
-
 from bs4 import BeautifulSoup
 import requests
 from lxml.html import fromstring
 from pymongo import MongoClient
-from time import sleep
-from tqdm import tqdm
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
@@ -187,7 +181,8 @@ class Connector:
         return (line for line in input_file)
 
     def _get_book(self, book_key):
-        #book_data = self._make_request(f'{BASE_URL}{book_key}')
+        # TODO: fix bug with _make_request, text in book_data is None
+        # book_data = self._make_request(f'{BASE_URL}{book_key}')
         book_data = requests.get(f'{BASE_URL}{book_key}')
         if book_data is None:
             self._update_log(f"Can't find information about book {book_key}")
@@ -222,49 +217,49 @@ class Connector:
             if content_mark is not None else None
         book_dict.update({} if votes_count is None else {'votes_count_livelib': int(votes_count.text)})
 
-        recenses = soup.find('div', class_='recenses-count')
-        recenses_count = recenses.find('div', class_='rating-text-wrapper') \
-            if recenses is not None else None
-        book_dict.update({} if recenses_count is None else {'recenses_count': int(recenses_count.text)})
+        reviews = soup.find('div', class_='recenses-count')
+        reviews_count = reviews.find('div', class_='rating-text-wrapper') \
+            if reviews is not None else None
+        book_dict.update({} if reviews_count is None else {'reviews_count': int(reviews_count.text)})
 
         subscr = soup.find('div', class_='get_book_by_subscr')
-        book_dict.update({} if subscr is None else {'subscr_price': 'Не указана'} if (
-                    len(subscr.text) < len('Взять по абонементу за')) else {
-            'subscr_price': int(re.sub(r'Взять по абонементу за', '', subscr.text).strip()[:-2])})
+        book_dict.update({} if subscr is None
+                         else {'subscr_price': int(re.sub(r'Взять по абонементу за', '', subscr.text).strip()[:-2])}
+                         if len(subscr.text) >= len('Взять по абонементу за') else {'subscr_price': 'Не указана'})
 
-        buy = soup.find('div', class_ = 'biblio_book_buy_block')
+        buy = soup.find('div', class_='biblio_book_buy_block')
         buy_price = buy.find('span', class_='simple-price') \
             if buy is not None else None
-        book_dict.update({} if buy_price is None else {
-            'buy_price': int(re.sub('Купить и скачать за', '', buy_price.text).strip()[:-2])})
+        book_dict.update({} if buy_price is None
+                         else {'buy_price': int(re.sub('Купить и скачать за', '', buy_price.text).strip()[:-2])})
 
-        audio = soup.find('span', class_ = 'type type_audio')
+        audio = soup.find('span', class_='type type_audio')
         audio_price = audio.find('span', class_='simple-price') \
             if audio is not None else None
-        book_dict.update({} if audio_price is None else {
-            'audio_price': int(re.sub('Цена аудиокниги', '', audio_price.text).strip()[:-2])})
+        book_dict.update({} if audio_price is None
+                         else {'audio_price': int(re.sub('Цена аудиокниги', '', audio_price.text).strip()[:-2])})
 
-        paper = soup.find('span', class_ = 'type type_hardcopy')
+        paper = soup.find('span', class_='type type_hardcopy')
         paper_price = paper.find('span', class_='simple-price') \
             if paper is not None else None
-        book_dict.update({} if paper_price is None else {
-            'paper_price': int(re.sub('Цена бумажной версии', '', paper_price.text).strip()[:-2])})
+        book_dict.update({} if paper_price is None
+                         else {'paper_price': int(re.sub('Цена бумажной версии', '', paper_price.text).strip()[:-2])})
 
-        volume_info = soup.find('li', class_ = 'volume')
+        volume_info = soup.find('li', class_='volume')
         volume = re.search(r'Объем:(.+?)стр', volume_info.text).group(1) \
             if volume_info is not None else None
         book_dict.update({} if volume is None else {'volume': int(volume.strip())})
 
-        genre_info = soup.find('div', class_ = 'ab-container breadcrumbs-container')
-        book_dict.update({} if genre_info is None else {
-            'genre': str(genre_info.find_all('li', {'class': 'breadcrumbs__item'})[1].text)})
+        genre_info = soup.find('div', class_='ab-container breadcrumbs-container')
+        book_dict.update({} if genre_info is None
+                         else {'genre': str(genre_info.find_all('li', {'class': 'breadcrumbs__item'})[1].text)})
 
-        award = soup.find('a', class_ = 'badge flag_best')
+        award = soup.find('a', class_='badge flag_best')
         award_bestseller = award.find('span', class_='flag_text') \
             if award is not None else None
         book_dict.update({} if award_bestseller is None else {'award_bestseller': award_bestseller.text})
 
-        award = soup.find('a', class_ = 'badge flag_hit')
+        award = soup.find('a', class_='badge flag_hit')
         award_hit = award.find('span', class_='flag_text') \
             if award is not None else None
         book_dict.update({} if award_hit is None else {'award_hit': award_hit.text})
@@ -296,56 +291,52 @@ class Connector:
         elements = elements_left + elements_right
 
         for elem in elements:
-            age_name = None
-            if (elem.text.startswith('Возрастное ограничение')):
+            if elem.text.startswith('Возрастное ограничение'):
                 age_name = elem.text
+                book_dict.update({} if age_name is None
+                                 else {'age': int(re.sub('\+', '',
+                                                         re.sub('Возрастное ограничение:', '', age_name)).strip())})
                 break
-        book_dict.update({} if age_name is None else {
-            'age': int(re.sub('\+', '', re.sub('Возрастное ограничение:', '', age_name)).strip())})
 
         for elem in elements:
-            date = None
-            if (elem.text.startswith('Дата выхода на ЛитРес')):
+            if elem.text.startswith('Дата выхода на ЛитРес'):
                 date = elem.text
+                book_dict.update({} if date is None
+                                 else {'date_litres': int(re.sub('Дата выхода на ЛитРес:', '', date).strip()[-4:])})
                 break
-        book_dict.update(
-            {} if date is None else {'date_litres': int(re.sub('Дата выхода на ЛитРес:', '', date).strip()[-4:])})
 
         for elem in elements:
-            date = None
-            if (elem.text.startswith('Дата написания')):
+            if elem.text.startswith('Дата написания'):
                 date = elem.text
+                book_dict.update({} if date is None
+                                 else {'date_writing': int(re.sub('Дата написания:', '', date).strip()[-4:])})
                 break
-        book_dict.update(
-            {} if date is None else {'date_writing': int(re.sub('Дата написания:', '', date).strip()[-4:])})
 
         for elem in elements:
-            date = None
-            if (elem.text.startswith('Дата перевода')):
+            if elem.text.startswith('Дата перевода'):
                 date = elem.text
+                book_dict.update({} if date is None
+                                 else {'translate': int(re.sub('Дата перевода:', '', date).strip()[-4:])})
                 break
-        book_dict.update({} if date is None else {'translate': int(re.sub('Дата перевода:', '', date).strip()[-4:])})
 
         for elem in elements:
-            translator = None
-            if (elem.text.startswith('Переводчик')):
+            if elem.text.startswith('Переводчик'):
                 translator = elem.text
+                book_dict.update({} if translator is None
+                                 else {'translator': re.sub('Переводчик:', '', translator).strip()})
                 break
-        book_dict.update({} if translator is None else {'translator': re.sub('Переводчик:', '', translator).strip()})
 
         for elem in elements:
-            isbn = None
-            if (elem.text.startswith('ISBN')):
+            if elem.text.startswith('ISBN'):
                 isbn = elem.text
+                book_dict.update({} if isbn is None else {'isbn': re.sub('ISBN:', '', isbn).strip()})
                 break
-        book_dict.update({} if isbn is None else {'isbn': re.sub('ISBN:', '', isbn).strip()})
 
         for elem in elements:
-            rights = None
-            if (elem.text.startswith('Правообладатель')):
+            if elem.text.startswith('Правообладатель'):
                 rights = elem.text
+                book_dict.update({} if rights is None else {'rights': re.sub('Правообладатель:', '', rights).strip()})
                 break
-        book_dict.update({} if rights is None else {'rights': re.sub('Правообладатель:', '', rights).strip()})
 
         self._update_log('book was got')
         return book_dict
