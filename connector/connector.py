@@ -229,7 +229,7 @@ class Connector:
         subscr = soup.find('div', class_='get_book_by_subscr')
         book_dict.update({} if subscr is None
                          else {'subscr_price': int(re.sub(r'Взять по абонементу за', '', subscr.text).strip()[:-2])}
-                         if len(subscr.text) >= len('Взять по абонементу за') else {'subscr_price': 'Не указана'})
+                         if len(subscr.text) >= len('Взять по абонементу за') else {'subscr_price': 0})
 
         buy = soup.find('div', class_='biblio_book_buy_block')
         buy_price = buy.find('span', class_='simple-price') \
@@ -278,6 +278,11 @@ class Connector:
 
         cit = soup.find('span', class_='quotes__count')
         book_dict.update({} if cit is None else {'citations': int(cit.text.strip())})
+
+        annotation = soup.find('div', class_='biblio_book_annotation')
+        book_dict.update({} if annotation is None
+                         else {'annotation': annotation.text.replace('\xa0', '\x20')
+                                                            .replace('Аннотация от ЛитРес', '')})
 
         description = soup.find('div', class_='biblio_book_descr_publishers')
         book_dict.update({} if description is None else {'description': description.text.replace('\xa0', '\x20')})
@@ -340,6 +345,39 @@ class Connector:
             if elem.text.startswith('Правообладатель'):
                 rights = elem.text
                 book_dict.update({} if rights is None else {'rights': re.sub('Правообладатель:', '', rights).strip()})
+                break
+
+        for elem in elements:
+            if elem.text.startswith('Общий размер'):
+                weight = elem.text
+                book_dict.update({} if weight is None
+                                 else {'weight': int(re.sub('Общий размер:', '', weight).strip()[:-3])})
+                break
+
+        for elem in elements:
+            if elem.text.startswith('Размер страницы'):
+                page_size = elem.text
+                book_dict.update({} if page_size is None
+                                 else {'page_size': re.sub('Размер страницы:', '', page_size).strip()})
+                break
+
+        genres_info = soup.find('div', class_='biblio_book_info')
+        genres_list = genres_info.find_all('li') if genres_info is not None else None
+
+        for elem in genres_list:
+            if elem.text.startswith('Жанр'):
+                genres_all = elem.text
+                genres_all = list(map(lambda s: s.strip(), re.sub('Жанр:', '', genres_all).split(',')))
+                genres_all[len(genres_all) - 1] = re.sub('Редактировать', '', genres_all[len(genres_all) - 1])
+                book_dict.update({} if genres_all is None else {'genres_all': genres_all})
+                break
+
+        for elem in genres_list:
+            if elem.text.startswith('Теги'):
+                tags_all = elem.text
+                tags_all = list(map(lambda s: s.strip(), re.sub('Теги:', '', tags_all).split(',')))
+                tags_all[len(tags_all) - 1] = re.sub('Редактировать', '', tags_all[len(tags_all) - 1])
+                book_dict.update({} if tags_all is None else {'tags_all': tags_all})
                 break
 
         self._update_log('book was got')
