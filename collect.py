@@ -25,3 +25,4 @@ if __name__ == '__main__':
     connector = Connector(args.database, args.username, args.password, args.host, args.port,
                           args.authenticationDatabase, args.sort)
     connector.collect(args.startPage, args.endPage, args.startBook, args.endBook, args.clearDatabase, args.logFile)
+    # connector.get_books_text()

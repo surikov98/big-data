@@ -133,14 +133,14 @@ class Connector:
         else:
             raise Exception(f'Unknown error: {response.status_code}; {response.text}')
 
-    def _get_book_links(self):
-        def check_exists_captcha(driver):
-            try:
-                driver.find_element(By.CLASS_NAME, "litres_captcha_page")
-                return True
-            except NoSuchElementException:
-                return False
+    def __check_exists_captcha(self, driver):
+        try:
+            driver.find_element(By.CLASS_NAME, "litres_captcha_page")
+            return True
+        except NoSuchElementException:
+            return False
 
+    def _get_book_links(self, get_new_electronic_russian_book=True):
         with open(_CHECKPOINT_FILE_NAME, 'r') as checkpoint_file:
             self._current_page_link = checkpoint_file.readline().strip()
             self._current_page_number = int(checkpoint_file.readline())
@@ -150,7 +150,7 @@ class Connector:
         while True:
             try:
                 driver.get(self._current_page_link)
-                if check_exists_captcha(driver):
+                if self.__check_exists_captcha(driver):
                     print("Captcha! Waiting for manual handling")
                     time.sleep(120)
                     print('Captcha managed')
@@ -168,8 +168,12 @@ class Connector:
 
             self._current_page_number += 1
 
-            self._current_page_link = f"https://www.litres.ru/novie/elektronnie-knigi/page-" \
-                                      f"{self._current_page_number}/?lang=52"
+            if get_new_electronic_russian_book:
+                self._current_page_link = f"https://www.litres.ru/novie/elektronnie-knigi" \
+                                          f"/page-{self._current_page_number}/?lang=52"
+            else:
+                self._current_page_link = f"https://www.litres.ru/kollekcii-knig/besplatnie-knigi/elektronnie-knigi" \
+                                          f"/page-{self._current_page_number}/?lang=52"
 
     def _get_book_links_from_file(self, input_file):
         if isinstance(input_file, str):
@@ -437,3 +441,30 @@ class Connector:
         except (ConnectionError, ValueError, CaptchaError, KeyboardInterrupt, Exception):
             self._close_log_file()
             raise
+
+    def get_books_text(self, is_from_file: bool = False):
+        # TODO: need add authoriaztion in litres for downloading
+        generator = self._get_book_links_from_file(_FILE_WITH_HREF_NAME) if is_from_file \
+            else self._get_book_links(False)
+
+        browser = webdriver.Firefox()
+
+        for book_link in generator:
+            try:
+                browser.get(book_link)
+                if self.__check_exists_captcha(browser):
+                    print("Captcha! Waiting for manual handling")
+                    time.sleep(120)
+                    print('Captcha managed')
+                    browser.get(book_link)
+                download_button = browser.find_element(By.CLASS_NAME, 'bb_newbutton_download')
+                open_format_list = download_button.find_element(By.CLASS_NAME, 'bb_newbutton_caption')
+                browser.execute_script('arguments[0].scrollIntoView(true);', open_format_list)
+                browser.execute_script('arguments[0].click();', open_format_list)
+                # maybe class_name only format_txt
+                download_txt_section = browser.find_element(By.CLASS_NAME, 'biblio_book_download_file format_txt')
+                download_href = download_txt_section.find_element(By.CLASS_NAME, 'biblio_book_download_file__link')
+                browser.execute_script('arguments[0].scrollIntoView(true);', download_href)
+                browser.execute_script('arguments[0].click();', download_href)
+            except NoSuchElementException:
+                print('Go to the next href...')
