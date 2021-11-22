@@ -442,6 +442,44 @@ class Connector:
             self._close_log_file()
             raise
 
+    def __authorize_by_email(self, session: webdriver.Firefox, email, password):
+        time.sleep(5)
+        login_tab = session.find_element(By.CLASS_NAME, 'Login-module__loginLink')
+        session.execute_script('arguments[0].scrollIntoView(true);', login_tab)
+        session.execute_script('arguments[0].click();', login_tab)
+        time.sleep(5)
+        email_and_phone_tabs = session.find_element(By.CLASS_NAME, 'AuthorizationPopup-module__step__block')
+        email_tab = email_and_phone_tabs.find_element(By.XPATH,
+                                                      '/html/body/div[1]/div[1]/header/div[2]/div[2]/div[2]/div/div/div'
+                                                      '/div/div[1]/div[3]/button[1]')
+        session.execute_script('arguments[0].scrollIntoView(true);', email_tab)
+        session.execute_script('arguments[0].click();', email_tab)
+        time.sleep(5)
+        email_input = session.find_element(By.CLASS_NAME, 'AuthorizationPopup-module__input')
+        email_input.clear()
+        email_input.send_keys(email)
+        continue_tab = session.find_element(By.XPATH,
+                                            '/html/body/div[1]/div[1]/header/div[2]/div[2]/div[2]/div/div/div/div[1]'
+                                            '/div/form/div[2]/button')
+        session.execute_script('arguments[0].scrollIntoView(true);', continue_tab)
+        session.execute_script('arguments[0].click();', continue_tab)
+        time.sleep(5)
+        pwd_input = session.find_element(By.CLASS_NAME, 'AuthorizationPopup-module__input')
+        pwd_input.clear()
+        pwd_input.send_keys(password)
+        authorize_tab = session.find_element(By.XPATH, '/html/body/div[1]/div[1]/header/div[2]/div[2]/div[2]/div/div'
+                                                       '/div/div[1]/div/form/div[3]/button')
+        session.execute_script('arguments[0].scrollIntoView(true);', authorize_tab)
+        session.execute_script('arguments[0].click();', authorize_tab)
+        time.sleep(5)
+        try:
+            close_reserve_tab = session.find_element(By.XPATH, '/html/body/div[1]/div[1]/header/div[2]/div[2]/div[2]'
+                                                               '/div/div/div/a')
+            session.execute_script('arguments[0].scrollIntoView(true);', close_reserve_tab)
+            session.execute_script('arguments[0].click();', close_reserve_tab)
+        except:
+            print('Not found reserve authorization methods')
+
     def get_books_text(self, is_from_file: bool = False):
         # TODO: need add authoriaztion in litres for downloading
         generator = self._get_book_links_from_file(_FILE_WITH_HREF_NAME) if is_from_file \
@@ -457,6 +495,7 @@ class Connector:
                     time.sleep(120)
                     print('Captcha managed')
                     browser.get(book_link)
+                self.__authorize_by_email(browser, '', '')
                 download_button = browser.find_element(By.CLASS_NAME, 'bb_newbutton_download')
                 open_format_list = download_button.find_element(By.CLASS_NAME, 'bb_newbutton_caption')
                 browser.execute_script('arguments[0].scrollIntoView(true);', open_format_list)
