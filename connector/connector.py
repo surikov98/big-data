@@ -443,18 +443,18 @@ class Connector:
             raise
 
     def __authorize_by_email(self, session: webdriver.Firefox, email, password):
-        time.sleep(5)
+        time.sleep(3)
         login_tab = session.find_element(By.CLASS_NAME, 'Login-module__loginLink')
         session.execute_script('arguments[0].scrollIntoView(true);', login_tab)
         session.execute_script('arguments[0].click();', login_tab)
-        time.sleep(5)
+        time.sleep(3)
         email_and_phone_tabs = session.find_element(By.CLASS_NAME, 'AuthorizationPopup-module__step__block')
         email_tab = email_and_phone_tabs.find_element(By.XPATH,
                                                       '/html/body/div[1]/div[1]/header/div[2]/div[2]/div[2]/div/div/div'
                                                       '/div/div[1]/div[3]/button[1]')
         session.execute_script('arguments[0].scrollIntoView(true);', email_tab)
         session.execute_script('arguments[0].click();', email_tab)
-        time.sleep(5)
+        time.sleep(3)
         email_input = session.find_element(By.CLASS_NAME, 'AuthorizationPopup-module__input')
         email_input.clear()
         email_input.send_keys(email)
@@ -463,7 +463,7 @@ class Connector:
                                             '/div/form/div[2]/button')
         session.execute_script('arguments[0].scrollIntoView(true);', continue_tab)
         session.execute_script('arguments[0].click();', continue_tab)
-        time.sleep(5)
+        time.sleep(3)
         pwd_input = session.find_element(By.CLASS_NAME, 'AuthorizationPopup-module__input')
         pwd_input.clear()
         pwd_input.send_keys(password)
@@ -471,21 +471,25 @@ class Connector:
                                                        '/div/div[1]/div/form/div[3]/button')
         session.execute_script('arguments[0].scrollIntoView(true);', authorize_tab)
         session.execute_script('arguments[0].click();', authorize_tab)
-        time.sleep(5)
+        time.sleep(7)
         try:
             close_reserve_tab = session.find_element(By.XPATH, '/html/body/div[1]/div[1]/header/div[2]/div[2]/div[2]'
                                                                '/div/div/div/a')
             session.execute_script('arguments[0].scrollIntoView(true);', close_reserve_tab)
             session.execute_script('arguments[0].click();', close_reserve_tab)
-        except:
+        except NoSuchElementException:
             print('Not found reserve authorization methods')
 
     def get_books_text(self, is_from_file: bool = False):
-        # TODO: need add authoriaztion in litres for downloading
         generator = self._get_book_links_from_file(_FILE_WITH_HREF_NAME) if is_from_file \
             else self._get_book_links(False)
 
-        browser = webdriver.Firefox()
+        profile = webdriver.FirefoxProfile()
+        profile.set_preference("browser.helperApps.neverAsk.saveToDisk", 'text/plain')  # need than don't open dialog window for download TXT
+        browser = webdriver.Firefox(profile)
+
+        browser.get(BASE_URL)
+        self.__authorize_by_email(browser, 'some_email@mail.ru', 'password')
 
         for book_link in generator:
             try:
@@ -495,13 +499,11 @@ class Connector:
                     time.sleep(120)
                     print('Captcha managed')
                     browser.get(book_link)
-                self.__authorize_by_email(browser, '', '')
                 download_button = browser.find_element(By.CLASS_NAME, 'bb_newbutton_download')
                 open_format_list = download_button.find_element(By.CLASS_NAME, 'bb_newbutton_caption')
                 browser.execute_script('arguments[0].scrollIntoView(true);', open_format_list)
                 browser.execute_script('arguments[0].click();', open_format_list)
-                # maybe class_name only format_txt
-                download_txt_section = browser.find_element(By.CLASS_NAME, 'biblio_book_download_file format_txt')
+                download_txt_section = browser.find_element(By.CLASS_NAME, 'format_txt')
                 download_href = download_txt_section.find_element(By.CLASS_NAME, 'biblio_book_download_file__link')
                 browser.execute_script('arguments[0].scrollIntoView(true);', download_href)
                 browser.execute_script('arguments[0].click();', download_href)
