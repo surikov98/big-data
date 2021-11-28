@@ -1,18 +1,20 @@
+import os
+import requests
+import time
 from http import HTTPStatus
 from bs4 import BeautifulSoup
-import requests
+from itertools import islice
 from lxml.html import fromstring
 from pymongo import MongoClient
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-import time
 from selenium.common.exceptions import NoSuchElementException
 from typing import Union
 
+from utils import get_uri_mongodb
 from .errors import CaptchaError, ConnectionError, DBConnectionError
 from .insert_buffer import InsertBuffer
 from .request import Request
-from utils import get_uri_mongodb
 
 import re
 
@@ -41,8 +43,9 @@ _HEADERS = {
 }
 
 _BUFFER_SIZE = BOOKS_PER_PAGE
-_FILE_WITH_HREF_NAME = '../assets/all_links.txt'
-_CHECKPOINT_FILE_NAME = '../assets/checkpoint.txt'
+_HREF_FILE = './assets/all_links.txt'
+_HREF_CHECKPOINT = './assets/checkpoint_href.txt'
+_DB_CHECKPOINT = './assets/checkpoint_db.txt'
 
 
 class Connector:
@@ -67,6 +70,7 @@ class Connector:
         self._current_page_link = None
         self._current_page_number = None
         self._file_with_href = None
+        self._current_book_index = 0
 
         self._check_fields()
 
@@ -109,13 +113,13 @@ class Connector:
                 self._db.books.delete_many({})
             elif 'books' not in collections:
                 self._db.create_collection('books')
-        except Exception:
+        except Exception as e:
             raise DBConnectionError('collection initialization failed') from None
         try:
             self._book_links = set()
             if not is_clear_database and 'books' in collections:
                 self._book_links = set(book['key'] for book in self._db.books.find())
-        except Exception:
+        except Exception as e:
             raise DBConnectionError('data from database initialization failed') from None
         self._book_buffer = InsertBuffer(self._db.books, _BUFFER_SIZE, self._update_log)
 
@@ -141,7 +145,7 @@ class Connector:
             return False
 
     def _get_book_links(self, get_new_electronic_russian_book=True):
-        with open(_CHECKPOINT_FILE_NAME, 'r') as checkpoint_file:
+        with open(_HREF_CHECKPOINT, 'r') as checkpoint_file:
             self._current_page_link = checkpoint_file.readline().strip()
             self._current_page_number = int(checkpoint_file.readline())
 
@@ -177,12 +181,14 @@ class Connector:
 
     def _get_book_links_from_file(self, input_file):
         if isinstance(input_file, str):
-            try:
-                self._file_with_href = open(input_file, 'r')
-                return (line.strip() for line in self._file_with_href)
-            except FileNotFoundError:
-                print(f'file with name {input_file} not found')
-        return (line for line in input_file)
+            input_file = open(input_file, 'r')
+        return islice(input_file, self._current_book_index, None)
+
+    @staticmethod
+    def _get_price_from_string(s, prefix=None):
+        if not prefix:
+            return float(s.strip().replace(',', '.'))
+        return float(re.sub(prefix, '', s).strip().replace(',', '.')[:-2])
 
     def _get_book(self, book_key):
         # TODO: fix bug with _make_request, text in book_data is None
@@ -205,8 +211,8 @@ class Connector:
         content_mark = soup.find('div', class_='art-rating-unit rating-source-litres rating-popup-launcher')
         average_rating = content_mark.find('div', class_='rating-number bottomline-rating') \
             if content_mark is not None else None
-        book_dict.update({} if average_rating is None else {'average_rating_litres': float(average_rating.text
-                                                                                           .replace(',', '.'))})
+        book_dict.update({} if average_rating is None else {'average_rating_litres':
+                                                            self._get_price_from_string(average_rating.text)})
 
         votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
             if content_mark is not None else None
@@ -216,7 +222,8 @@ class Connector:
         average_rating = content_mark.find('div', class_='rating-number bottomline-rating') \
             if content_mark is not None else None
         book_dict.update(
-            {} if average_rating is None else {'average_rating_livelib': float(average_rating.text.replace(',', '.'))})
+            {} if average_rating is None else {'average_rating_livelib':
+                                               self._get_price_from_string(average_rating.text)})
 
         votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
             if content_mark is not None else None
@@ -228,26 +235,26 @@ class Connector:
 
         subscr = soup.find('div', class_='get_book_by_subscr')
         book_dict.update({} if subscr is None
-                         else {'subscr_price': int(re.sub(r'Взять по абонементу за', '', subscr.text).strip()[:-2])}
+                         else {'subscr_price': self._get_price_from_string(subscr.text, 'Взять по абонементу за')}
                          if len(subscr.text) >= len('Взять по абонементу за') else {'subscr_price': 0})
 
         buy = soup.find('div', class_='biblio_book_buy_block')
         buy_price = buy.find('span', class_='simple-price') \
             if buy is not None else None
         book_dict.update({} if buy_price is None
-                         else {'buy_price': int(re.sub('Купить и скачать за', '', buy_price.text).strip()[:-2])})
+                         else {'buy_price': self._get_price_from_string(buy_price.text, 'Купить и скачать за')})
 
         audio = soup.find('span', class_='type type_audio')
         audio_price = audio.find('span', class_='simple-price') \
             if audio is not None else None
         book_dict.update({} if audio_price is None
-                         else {'audio_price': int(re.sub('Цена аудиокниги', '', audio_price.text).strip()[:-2])})
+                         else {'audio_price': self._get_price_from_string(audio_price.text, 'Цена аудиокниги')})
 
         paper = soup.find('span', class_='type type_hardcopy')
         paper_price = paper.find('span', class_='simple-price') \
             if paper is not None else None
         book_dict.update({} if paper_price is None
-                         else {'paper_price': int(re.sub('Цена бумажной версии', '', paper_price.text).strip()[:-2])})
+                         else {'paper_price': self._get_price_from_string(paper_price.text, 'Цена бумажной версии')})
 
         volume_info = soup.find('li', class_='volume')
         volume = re.search(r'Объем:(.+?)стр', volume_info.text).group(1) \
@@ -388,15 +395,17 @@ class Connector:
         self._start_book = start_book
         self._end_book = end_book
 
-        generator = self._get_book_links_from_file(_FILE_WITH_HREF_NAME) if is_from_file else self._get_book_links()
+        generator = self._get_book_links_from_file(_HREF_FILE) if is_from_file else self._get_book_links()
 
         try:
             for book_link in generator:
+                book_link = book_link.strip()
                 book_key = book_link.replace(BASE_URL, '')
+                print(f"{self._current_book_index}: {book_link}", end='\r')
+                self._current_book_index += 1
                 if book_key in self._book_links:
                     self._update_log(f'book {book_key} has been already gotten')
                     continue
-
                 book_data = self._get_book(book_key)
                 if book_data is None:
                     continue
@@ -436,6 +445,13 @@ class Connector:
             self._close_log_file()
             return
 
+        if os.path.exists(_DB_CHECKPOINT):
+            with open(_HREF_CHECKPOINT, 'r') as checkpoint_file:
+                try:
+                    self._current_book_index = int(checkpoint_file.readline())
+                except Exception:
+                    pass
+
         try:
             self._collect(start_book_page, end_book_page, start_book, end_book, is_from_file)
             self._close_log_file()
@@ -443,6 +459,8 @@ class Connector:
             self._close_log_file()
             raise
         except (ConnectionError, ValueError, CaptchaError, KeyboardInterrupt, Exception):
+            with open(_DB_CHECKPOINT, 'w') as checkpoint_file:
+                checkpoint_file.write(str(self._current_book_index))
             self._close_log_file()
             raise
 
@@ -485,7 +503,7 @@ class Connector:
             print('Not found reserve authorization methods')
 
     def get_books_text(self, is_from_file: bool = False):
-        generator = self._get_book_links_from_file(_FILE_WITH_HREF_NAME) if is_from_file \
+        generator = self._get_book_links_from_file(_HREF_FILE) if is_from_file \
             else self._get_book_links(False)
 
         profile = webdriver.FirefoxProfile()
