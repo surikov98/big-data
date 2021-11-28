@@ -41,8 +41,8 @@ _HEADERS = {
 }
 
 _BUFFER_SIZE = BOOKS_PER_PAGE
-_FILE_WITH_HREF_NAME = './connector/configs/all_links.txt'
-_CHECKPOINT_FILE_NAME = './connector/configs/checkpoint.txt'
+_FILE_WITH_HREF_NAME = '../assets/all_links.txt'
+_CHECKPOINT_FILE_NAME = '../assets/checkpoint.txt'
 
 
 class Connector:
@@ -207,6 +207,7 @@ class Connector:
             if content_mark is not None else None
         book_dict.update({} if average_rating is None else {'average_rating_litres': float(average_rating.text
                                                                                            .replace(',', '.'))})
+
         votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
             if content_mark is not None else None
         book_dict.update({} if votes_count is None else {'votes_count_litres': int(votes_count.text)})
@@ -222,8 +223,7 @@ class Connector:
         book_dict.update({} if votes_count is None else {'votes_count_livelib': int(votes_count.text)})
 
         reviews = soup.find('div', class_='recenses-count')
-        reviews_count = reviews.find('div', class_='rating-text-wrapper') \
-            if reviews is not None else None
+        reviews_count = reviews.find('div', class_='rating-text-wrapper') if reviews is not None else None
         book_dict.update({} if reviews_count is None else {'reviews_count': int(reviews_count.text)})
 
         subscr = soup.find('div', class_='get_book_by_subscr')
@@ -288,15 +288,10 @@ class Connector:
         book_dict.update({} if description is None else {'description': description.text.replace('\xa0', '\x20')})
 
         blocks = soup.find('div', class_='biblio_book_info_detailed')
-        part1 = blocks.find('ul', class_='biblio_book_info_detailed_left') \
-            if blocks is not None else None
-        elements_left = part1.find_all('li') \
-            if part1 is not None else None
-        part2 = blocks.find('ul', class_='biblio_book_info_detailed_right') \
-            if blocks is not None else []
-        elements_right = part2.find_all('li') \
-            if part2 is not None else []
-
+        part1 = blocks.find('ul', class_='biblio_book_info_detailed_left') if blocks is not None else None
+        elements_left = part1.find_all('li') if part1 is not None else None
+        part2 = blocks.find('ul', class_='biblio_book_info_detailed_right') if blocks is not None else []
+        elements_right = part2.find_all('li') if part2 is not None else []
         elements = elements_left + elements_right
 
         for elem in elements:
@@ -305,61 +300,36 @@ class Connector:
                 book_dict.update({} if age_name is None
                                  else {'age': int(re.sub('\+', '',
                                                          re.sub('Возрастное ограничение:', '', age_name)).strip())})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Дата выхода на ЛитРес'):
+            elif elem.text.startswith('Дата выхода на ЛитРес'):
                 date = elem.text
                 book_dict.update({} if date is None
                                  else {'date_litres': int(re.sub('Дата выхода на ЛитРес:', '', date).strip()[-4:])})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Дата написания'):
+            elif elem.text.startswith('Дата написания'):
                 date = elem.text
                 book_dict.update({} if date is None
                                  else {'date_writing': int(re.sub('Дата написания:', '', date).strip()[-4:])})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Дата перевода'):
+            elif elem.text.startswith('Дата перевода'):
                 date = elem.text
                 book_dict.update({} if date is None
                                  else {'translate': int(re.sub('Дата перевода:', '', date).strip()[-4:])})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Переводчик'):
+            elif elem.text.startswith('Переводчик'):
                 translator = elem.text
                 book_dict.update({} if translator is None
                                  else {'translator': re.sub('Переводчик:', '', translator).strip()})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('ISBN'):
+            elif elem.text.startswith('ISBN'):
                 isbn = elem.text
                 book_dict.update({} if isbn is None else {'isbn': re.sub('ISBN:', '', isbn).strip()})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Правообладатель'):
+            elif elem.text.startswith('Правообладатель'):
                 rights = elem.text
                 book_dict.update({} if rights is None else {'rights': re.sub('Правообладатель:', '', rights).strip()})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Общий размер'):
+            elif elem.text.startswith('Общий размер'):
                 weight = elem.text
                 book_dict.update({} if weight is None
                                  else {'weight': int(re.sub('Общий размер:', '', weight).strip()[:-3])})
-                break
-
-        for elem in elements:
-            if elem.text.startswith('Размер страницы'):
+            elif elem.text.startswith('Размер страницы'):
                 page_size = elem.text
                 book_dict.update({} if page_size is None
                                  else {'page_size': re.sub('Размер страницы:', '', page_size).strip()})
-                break
 
         genres_info = soup.find('div', class_='biblio_book_info')
         genres_list = genres_info.find_all('li') if genres_info is not None else None
@@ -370,15 +340,11 @@ class Connector:
                 genres_all = list(map(lambda s: s.strip(), re.sub('Жанр:', '', genres_all).split(',')))
                 genres_all[len(genres_all) - 1] = re.sub('Редактировать', '', genres_all[len(genres_all) - 1])
                 book_dict.update({} if genres_all is None else {'genres_all': genres_all})
-                break
-
-        for elem in genres_list:
-            if elem.text.startswith('Теги'):
+            elif elem.text.startswith('Теги'):
                 tags_all = elem.text
                 tags_all = list(map(lambda s: s.strip(), re.sub('Теги:', '', tags_all).split(',')))
                 tags_all[len(tags_all) - 1] = re.sub('Редактировать', '', tags_all[len(tags_all) - 1])
                 book_dict.update({} if tags_all is None else {'tags_all': tags_all})
-                break
 
         self._update_log('book was got')
         return book_dict
