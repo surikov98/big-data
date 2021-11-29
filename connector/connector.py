@@ -227,7 +227,7 @@ class Connector:
 
         votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
             if content_mark is not None else None
-        book_dict.update({} if votes_count is None else {'votes_count_livelib': int(votes_count.text)})
+        book_dict.update({} if votes_count is None else {'votes_count_livelib': int(re.sub(' ', '', votes_count.text))})
 
         reviews = soup.find('div', class_='recenses-count')
         reviews_count = reviews.find('div', class_='rating-text-wrapper') if reviews is not None else None
@@ -257,8 +257,10 @@ class Connector:
                          else {'paper_price': self._get_price_from_string(paper_price.text, 'Цена бумажной версии')})
 
         volume_info = soup.find('li', class_='volume')
-        volume = re.search(r'Объем:(.+?)стр', volume_info.text).group(1) \
+        volume_ask = re.search(r'Объем:(.+?)стр', volume_info.text) \
             if volume_info is not None else None
+        volume = volume_ask.group(1) \
+            if volume_ask is not None else None
         book_dict.update({} if volume is None else {'volume': int(volume.strip())})
 
         genre_info = soup.find('div', class_='ab-container breadcrumbs-container')
@@ -296,8 +298,8 @@ class Connector:
 
         blocks = soup.find('div', class_='biblio_book_info_detailed')
         part1 = blocks.find('ul', class_='biblio_book_info_detailed_left') if blocks is not None else None
-        elements_left = part1.find_all('li') if part1 is not None else None
-        part2 = blocks.find('ul', class_='biblio_book_info_detailed_right') if blocks is not None else []
+        elements_left = part1.find_all('li') if part1 is not None else []
+        part2 = blocks.find('ul', class_='biblio_book_info_detailed_right') if blocks is not None else None
         elements_right = part2.find_all('li') if part2 is not None else []
         elements = elements_left + elements_right
 
@@ -312,9 +314,15 @@ class Connector:
                 book_dict.update({} if date is None
                                  else {'date_litres': int(re.sub('Дата выхода на ЛитРес:', '', date).strip()[-4:])})
             elif elem.text.startswith('Дата написания'):
-                date = elem.text
-                book_dict.update({} if date is None
-                                 else {'date_writing': int(re.sub('Дата написания:', '', date).strip()[-4:])})
+                try:
+                    date = elem.text
+                    date = re.sub('Дата написания:', '', date).strip()
+                    date = re.sub('г.', '', date).strip()
+                    book_dict.update({} if date is None
+                                     else {'date_writing': int(date[:2] + date[-2:])}
+                                     if 5 < len(date) < 8 else {'date_writing': int(date[-4:])})
+                except Exception:
+                    pass
             elif elem.text.startswith('Дата перевода'):
                 date = elem.text
                 book_dict.update({} if date is None
@@ -341,17 +349,18 @@ class Connector:
         genres_info = soup.find('div', class_='biblio_book_info')
         genres_list = genres_info.find_all('li') if genres_info is not None else None
 
-        for elem in genres_list:
-            if elem.text.startswith('Жанр'):
-                genres_all = elem.text
-                genres_all = list(map(lambda s: s.strip(), re.sub('Жанр:', '', genres_all).split(',')))
-                genres_all[len(genres_all) - 1] = re.sub('Редактировать', '', genres_all[len(genres_all) - 1])
-                book_dict.update({} if genres_all is None else {'genres_all': genres_all})
-            elif elem.text.startswith('Теги'):
-                tags_all = elem.text
-                tags_all = list(map(lambda s: s.strip(), re.sub('Теги:', '', tags_all).split(',')))
-                tags_all[len(tags_all) - 1] = re.sub('Редактировать', '', tags_all[len(tags_all) - 1])
-                book_dict.update({} if tags_all is None else {'tags_all': tags_all})
+        if genres_list is not None:
+            for elem in genres_list:
+                if elem.text.startswith('Жанр'):
+                    genres_all = elem.text
+                    genres_all = list(map(lambda s: s.strip(), re.sub('Жанр:', '', genres_all).split(',')))
+                    genres_all[len(genres_all) - 1] = re.sub('Редактировать', '', genres_all[len(genres_all) - 1])
+                    book_dict.update({} if genres_all is None else {'genres_all': genres_all})
+                elif elem.text.startswith('Теги'):
+                    tags_all = elem.text
+                    tags_all = list(map(lambda s: s.strip(), re.sub('Теги:', '', tags_all).split(',')))
+                    tags_all[len(tags_all) - 1] = re.sub('Редактировать', '', tags_all[len(tags_all) - 1])
+                    book_dict.update({} if tags_all is None else {'tags_all': tags_all})
 
         self._update_log('book was got')
         return book_dict
