@@ -216,7 +216,7 @@ class Connector:
 
         votes_count = content_mark.find('div', class_='votes-count bottomline-rating-count') \
             if content_mark is not None else None
-        book_dict.update({} if votes_count is None else {'votes_count_litres': int(votes_count.text)})
+        book_dict.update({} if votes_count is None else {'votes_count_litres': int(re.sub(' ', '', votes_count.text))})
 
         content_mark = soup.find('div', class_='art-rating-unit rating-source-livelib rating-popup-launcher')
         average_rating = content_mark.find('div', class_='rating-number bottomline-rating') \
