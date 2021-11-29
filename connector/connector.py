@@ -446,7 +446,7 @@ class Connector:
             return
 
         if os.path.exists(_DB_CHECKPOINT):
-            with open(_HREF_CHECKPOINT, 'r') as checkpoint_file:
+            with open(_DB_CHECKPOINT, 'r') as checkpoint_file:
                 try:
                     self._current_book_index = int(checkpoint_file.readline())
                 except Exception:
