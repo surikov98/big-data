@@ -324,9 +324,15 @@ class Connector:
                 except Exception:
                     pass
             elif elem.text.startswith('Дата перевода'):
-                date = elem.text
-                book_dict.update({} if date is None
-                                 else {'translate': int(re.sub('Дата перевода:', '', date).strip()[-4:])})
+                try:
+                    date = elem.text
+                    date = re.sub('Дата перевода:', '', date).strip()
+                    date = re.sub('г.', '', date).strip()
+                    book_dict.update({} if date is None
+                                     else {'translate': int(date[:2] + date[-2:])}
+                                     if 5 < len(date) < 8 else {'translate': int(date[-4:])})
+                except Exception:
+                    pass
             elif elem.text.startswith('Переводчик'):
                 translator = elem.text
                 book_dict.update({} if translator is None
