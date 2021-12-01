@@ -24,6 +24,7 @@ def calculate_rating_rank_correlation(args):
 
     rating_litres = df.rdd.map(lambda r: r[0])
     rating_livelib = df.rdd.map(lambda r: r[1])
+
     corr = Statistics.corr(rating_litres, rating_livelib, method='spearman')
     records = df.collect()
     return corr, records
