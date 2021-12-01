@@ -1,4 +1,5 @@
 import argparse
+from enum import Enum
 
 from pyspark.sql import SparkSession
 from typing import Union
@@ -52,3 +53,11 @@ def get_data_frame_from_mongodb(database: str, username: Union[str, None] = None
         df = spark.read.format('com.mongodb.spark.sql.DefaultSource').options(uri=uri, collection='books') \
             .load(schema=df.schema)
     return df
+
+
+class Age(Enum):
+    ZERO = 0
+    SIX = 6
+    TWELVE = 12
+    SIXTEEN = 16
+    EIGHTEEN = 18

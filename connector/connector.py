@@ -188,7 +188,7 @@ class Connector:
     def _get_price_from_string(s, prefix=None):
         if not prefix:
             return float(s.strip().replace(',', '.'))
-        return float(re.sub(prefix, '', s).strip().replace(',', '.')[:-2].replace(' ',''))
+        return float(re.sub(prefix, '', s).strip().replace(',', '.')[:-2].replace(' ', ''))
 
     def _get_book(self, book_key):
         # TODO: fix bug with _make_request, text in book_data is None
