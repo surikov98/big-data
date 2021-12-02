@@ -420,20 +420,19 @@ class Connector:
 
         try:
             for book_link in generator:
-                continue
-                # book_link = book_link.strip()
-                # book_key = book_link.replace(BASE_URL, '')
-                # print(f"{self._current_book_index}: {book_link}", end='\r')
-                # self._current_book_index += 1
-                # if book_key in self._book_links:
-                #     self._update_log(f'book {book_key} has been already gotten')
-                #     continue
-                # book_data = self._get_book(book_key)
-                # if book_data is None:
-                #     continue
-                #
-                # self._book_buffer.add(book_data)
-                # self._book_links.add(book_link)
+                book_link = book_link.strip()
+                book_key = book_link.replace(BASE_URL, '')
+                print(f"{self._current_book_index}: {book_link}", end='\r')
+                self._current_book_index += 1
+                if book_key in self._book_links:
+                    self._update_log(f'book {book_key} has been already gotten')
+                    continue
+                book_data = self._get_book(book_key)
+                if book_data is None:
+                    continue
+
+                self._book_buffer.add(book_data)
+                self._book_links.add(book_link)
             if self._file_with_href is not None:
                 self._file_with_href.close()
         except DBConnectionError as exc:
