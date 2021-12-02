@@ -16,6 +16,7 @@ def register_launch_arguments():
                         default=BOOKS_PER_PAGE)
     parser.add_argument('--clearDatabase', help='clear database', action='store_true')
     parser.add_argument('-l', '--logFile', help='path to log file', default='connect.log')
+    parser.add_argument('--sourceFile', help='path to file with links', default='./assets/all_links.txt')
 
     return parser.parse_args()
 
@@ -24,5 +25,6 @@ if __name__ == '__main__':
     args = register_launch_arguments()
     connector = Connector(args.database, args.username, args.password, args.host, args.port,
                           args.authenticationDatabase, args.sort)
-    connector.collect(args.startPage, args.endPage, args.startBook, args.endBook, args.clearDatabase, args.logFile)
+    connector.collect(args.startPage, args.endPage, args.startBook, args.endBook, args.clearDatabase, args.logFile,
+                      args.sourceFile)
     # connector.get_books_text()

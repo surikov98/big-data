@@ -12,6 +12,7 @@ from selenium.common.exceptions import NoSuchElementException
 from typing import Union
 
 from utils import get_uri_mongodb
+from .anticaptcha import process_captcha
 from .errors import CaptchaError, ConnectionError, DBConnectionError
 from .insert_buffer import InsertBuffer
 from .request import Request
@@ -43,7 +44,6 @@ _HEADERS = {
 }
 
 _BUFFER_SIZE = BOOKS_PER_PAGE
-_HREF_FILE = './assets/all_links.txt'
 _HREF_CHECKPOINT = './assets/checkpoint_href.txt'
 _DB_CHECKPOINT = './assets/checkpoint_db.txt'
 
@@ -149,22 +149,28 @@ class Connector:
             self._current_page_link = checkpoint_file.readline().strip()
             self._current_page_number = int(checkpoint_file.readline())
 
-        driver = webdriver.Firefox()
+        driver = webdriver.Firefox(executable_path='./assets/geckodriver')
 
         while True:
             try:
                 driver.get(self._current_page_link)
                 if self.__check_exists_captcha(driver):
-                    print("Captcha! Waiting for manual handling")
-                    time.sleep(120)
+                    if process_captcha(driver):
+                        print("Captcha is done")
+                    else:
+                        print("Failed to resolve captcha. Waiting for manual handling")
+                        while self.__check_exists_captcha(driver):
+                            time.sleep(1)
                     print('Captcha managed')
-                    driver.get(self._current_page_link)
 
-                content_books_names = driver.find_elements(By.CLASS_NAME, "art__name")  # названия книги
                 time.sleep(1)
+                content_books_names = driver.find_elements(By.CLASS_NAME, "art__name")  # названия книги
 
                 for book in content_books_names:
-                    element = book.find_element(By.TAG_NAME, "a")
+                    try:
+                        element = book.find_element(By.TAG_NAME, "a")
+                    except Exception as e:
+                        continue
                     yield element.get_attribute("href")
                 time.sleep(1)
             except NoSuchElementException:
@@ -404,29 +410,30 @@ class Connector:
             self._log_file.close()
             self._log_file = None
 
-    def _collect(self, start_book_page, end_book_page, start_book, end_book, is_from_file):
+    def _collect(self, start_book_page, end_book_page, start_book, end_book, source_file):
         self._start_book_page = start_book_page
         self._end_book_page = end_book_page
         self._start_book = start_book
         self._end_book = end_book
 
-        generator = self._get_book_links_from_file(_HREF_FILE) if is_from_file else self._get_book_links()
+        generator = self._get_book_links_from_file(source_file) if source_file else self._get_book_links()
 
         try:
             for book_link in generator:
-                book_link = book_link.strip()
-                book_key = book_link.replace(BASE_URL, '')
-                print(f"{self._current_book_index}: {book_link}", end='\r')
-                self._current_book_index += 1
-                if book_key in self._book_links:
-                    self._update_log(f'book {book_key} has been already gotten')
-                    continue
-                book_data = self._get_book(book_key)
-                if book_data is None:
-                    continue
-
-                self._book_buffer.add(book_data)
-                self._book_links.add(book_link)
+                continue
+                # book_link = book_link.strip()
+                # book_key = book_link.replace(BASE_URL, '')
+                # print(f"{self._current_book_index}: {book_link}", end='\r')
+                # self._current_book_index += 1
+                # if book_key in self._book_links:
+                #     self._update_log(f'book {book_key} has been already gotten')
+                #     continue
+                # book_data = self._get_book(book_key)
+                # if book_data is None:
+                #     continue
+                #
+                # self._book_buffer.add(book_data)
+                # self._book_links.add(book_link)
             if self._file_with_href is not None:
                 self._file_with_href.close()
         except DBConnectionError as exc:
@@ -444,7 +451,7 @@ class Connector:
 
     def collect(self, start_book_page: int = 1, end_book_page: Union[int, None] = None, start_book: int = 1,
                 end_book: int = BOOKS_PER_PAGE, is_clear_database: bool = True, log_file_path: Union[str, None] = None,
-                is_from_file: bool = True):
+                source_file: Union[str, None] = None):
         if log_file_path is not None:
             self._log_file = open(log_file_path, 'w')
         else:
@@ -468,7 +475,7 @@ class Connector:
                     pass
 
         try:
-            self._collect(start_book_page, end_book_page, start_book, end_book, is_from_file)
+            self._collect(start_book_page, end_book_page, start_book, end_book, source_file)
             self._close_log_file()
         except DBConnectionError:
             self._close_log_file()
@@ -517,8 +524,8 @@ class Connector:
         except NoSuchElementException:
             print('Not found reserve authorization methods')
 
-    def get_books_text(self, is_from_file: bool = False):
-        generator = self._get_book_links_from_file(_HREF_FILE) if is_from_file \
+    def get_books_text(self, source_file: str = None):
+        generator = self._get_book_links_from_file(source_file) if source_file \
             else self._get_book_links(False)
 
         profile = webdriver.FirefoxProfile()

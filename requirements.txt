@@ -12,3 +12,4 @@ scipy
 tqdm~=4.62.3
 beautifulsoup4~=4.10.0
 selenium~=4.0.0
+python-anticaptcha
