@@ -1,3 +1,4 @@
+import json
 import os
 import requests
 import time
@@ -10,6 +11,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 from typing import Union
+from tqdm import tqdm
 
 from utils import get_uri_mongodb
 from .anticaptcha import process_captcha
@@ -66,7 +68,7 @@ class Connector:
         self._start_book_page = self._end_book_page = self._start_book = self._end_book = None
         self._current_book_page = self._current_book = None
         self._pages_count = None
-        self._books_ids = None
+        self._book_links = None
         self._current_page_link = None
         self._current_page_number = None
         self._file_with_href = None
@@ -144,12 +146,16 @@ class Connector:
         except NoSuchElementException:
             return False
 
-    def _get_book_links(self, get_new_electronic_russian_book=True):
+    def _get_book_links(self, get_new_electronic_russian_book=True, server_side=False):
         with open(_HREF_CHECKPOINT, 'r') as checkpoint_file:
             self._current_page_link = checkpoint_file.readline().strip()
             self._current_page_number = int(checkpoint_file.readline())
 
-        driver = webdriver.Firefox(executable_path='./assets/geckodriver')
+        options = webdriver.FirefoxOptions()
+        if server_side:
+            options.add_argument('--headless')
+
+        driver = webdriver.Firefox(executable_path='./assets/geckodriver', options=options)
 
         while True:
             try:
@@ -410,13 +416,14 @@ class Connector:
             self._log_file.close()
             self._log_file = None
 
-    def _collect(self, start_book_page, end_book_page, start_book, end_book, source_file):
+    def _collect(self, start_book_page, end_book_page, start_book, end_book, source_file, server_side):
         self._start_book_page = start_book_page
         self._end_book_page = end_book_page
         self._start_book = start_book
         self._end_book = end_book
 
-        generator = self._get_book_links_from_file(source_file) if source_file else self._get_book_links()
+        generator = self._get_book_links_from_file(source_file) if source_file else \
+            self._get_book_links(server_side=server_side)
 
         try:
             for book_link in generator:
@@ -450,7 +457,7 @@ class Connector:
 
     def collect(self, start_book_page: int = 1, end_book_page: Union[int, None] = None, start_book: int = 1,
                 end_book: int = BOOKS_PER_PAGE, is_clear_database: bool = True, log_file_path: Union[str, None] = None,
-                source_file: Union[str, None] = None):
+                source_file: Union[str, None] = None, server_side: bool = False):
         if log_file_path is not None:
             self._log_file = open(log_file_path, 'w')
         else:
@@ -474,7 +481,7 @@ class Connector:
                     pass
 
         try:
-            self._collect(start_book_page, end_book_page, start_book, end_book, source_file)
+            self._collect(start_book_page, end_book_page, start_book, end_book, source_file, server_side)
             self._close_log_file()
         except DBConnectionError:
             self._close_log_file()
@@ -552,3 +559,76 @@ class Connector:
                 browser.execute_script('arguments[0].click();', download_href)
             except NoSuchElementException:
                 print('Go to the next href...')
+
+    def _get_book_data_from_file(self, file_object):
+        file_object.seek(0)
+        if file_object.readline() != '[\n':
+            raise Exception('Incorrect file')
+        count_str = file_object.readline()
+        if count_str[-1] != '\n':
+            raise Exception('Incorrect file')
+        if count_str[-2] != ',':
+            return
+        books_count = json.loads(count_str[:-2])['count']
+        self._current_book = 0
+        with tqdm(ascii=True, total=books_count) as bar:
+            while True:
+                s = file_object.readline()
+                if s[-1] == ']':
+                    if len(s) != 1:
+                        raise Exception('Incorrect file')
+                    break
+                else:
+                    if s[-1] != '\n':
+                        raise Exception('Incorrect file')
+                    s = s[:-1]
+                    if s[-1] == ',':
+                        s = s[:-1]
+
+                book_data = json.loads(s)
+                self._current_book += 1
+                self._update_log(f"book: {self._current_book}/{books_count}; bookLink: {book_data['key']}")
+                yield book_data
+                bar.update()
+
+    def _connect_from_file(self, file_object):
+        try:
+            for book_data in self._get_book_data_from_file(file_object):
+                book_link = book_data['key']
+                if book_link in self._book_links:
+                    self._update_log(f'book {book_link} has been already gotten')
+                    continue
+
+                self._book_buffer.add(book_data)
+                self._book_links.add(book_link)
+        except DBConnectionError as exc:
+            # does not take into account unexpected repetitions of books
+            if self._current_book == 0:
+                self._update_log('No successful inserts in database')
+            else:
+                successful_books = (self._current_book // _BUFFER_SIZE) * _BUFFER_SIZE
+                self._update_log(f'{successful_books} successful books in database')
+            raise exc from None
+        except (KeyboardInterrupt, Exception) as exc:
+            self._flush_buffer()
+            raise exc from None
+
+        self._flush_buffer()
+
+    def connect_from_file(self, filename: str, is_clear_database: bool = True):
+        self._log_file = open('connect_from_file.log', 'w')
+        self._init_database(is_clear_database)
+
+        if isinstance(filename, str):
+            file_object = open(filename, 'r', encoding='utf-8')
+        else:
+            file_object = filename
+
+        try:
+            self._connect_from_file(file_object)
+            self._close_log_file()
+            file_object.close()
+        except (DBConnectionError, KeyboardInterrupt, Exception):
+            self._close_log_file()
+            file_object.close()
+            raise
