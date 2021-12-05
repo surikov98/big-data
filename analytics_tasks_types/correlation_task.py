@@ -1,4 +1,3 @@
-import abc
 import plotly.graph_objects as go
 
 from .base_analytics import BaseAnalytics
