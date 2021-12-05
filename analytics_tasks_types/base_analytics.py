@@ -1,4 +1,3 @@
-import abc
 import argparse
 
 from utils import get_data_frame_from_mongodb, update_argument_parser_mongodb
@@ -11,34 +10,34 @@ def register_launch_arguments():
     return parser.parse_args()
 
 
-class BaseAnalytics(object):
-    __metaclass__ = abc.ABCMeta
+class BaseAnalytics:
+    __abstract__ = True
 
     task_list = []
 
-    def __init__(self, is_need_visualise=True):
+    def __init__(self, name, description, is_need_visualise=False):
         self.is_need_visualise = is_need_visualise
         self.df = None
+        self.name = name
+        self.description = description
 
-    @abc.abstractmethod
-    def _request_data(self):
+    def _prepare_output_data(self):
         pass
 
-    @abc.abstractmethod
-    def _get_data_frame(self):
+    def _get_specific_data(self, df):
         pass
 
-    @abc.abstractmethod
     def _visualize(self):
         pass
 
     def run_process(self):
+        print(f"Run process '{self.name}'")
+        print(f"About process: '{self.description}'")
         args = register_launch_arguments()
         df = get_data_frame_from_mongodb(args.database, args.username, args.password, args.host, args.port,
                                          args.authenticationDatabase)
-        self.df = df
-        self._get_data_frame()
-        self._request_data()
+        self.df = self._get_specific_data(df)
+        self._prepare_output_data()
         if self.is_need_visualise:
             self._visualize()
 

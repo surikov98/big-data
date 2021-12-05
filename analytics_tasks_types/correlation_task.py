@@ -8,9 +8,11 @@ from scipy.stats import linregress, rankdata
 
 
 class CorrelationTask(BaseAnalytics):
+    __abstract__ = True
 
-    def __init__(self, xaxis_title, yaxis_title, html_file_name, is_need_visualise=True, is_ranking_corr_task=True):
-        super().__init__(is_need_visualise)
+    def __init__(self, name, description, xaxis_title, yaxis_title, html_file_name, is_need_visualise=True,
+                 is_ranking_corr_task=True):
+        super().__init__(name, description, is_need_visualise)
         self.correlation = None
         self.records = None
         self.xaxis_title = xaxis_title
@@ -18,15 +20,11 @@ class CorrelationTask(BaseAnalytics):
         self.html_file_name = html_file_name
         self.is_ranking_corr_task = is_ranking_corr_task
 
-    def _request_data(self):
+    def _prepare_output_data(self):
         x = self.df.rdd.map(lambda r: r[0])
         y = self.df.rdd.map(lambda r: r[1])
         self.correlation = Statistics.corr(x, y, method='spearman')
         self.records = self.df.collect()
-
-    @abc.abstractmethod
-    def _get_data_frame(self):
-        pass
 
     def _visualize(self):
         x, y = tuple(zip(*self.records))
