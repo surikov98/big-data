@@ -37,15 +37,17 @@ class BaseAnalytics:
     def run_process(self, df, return_html=False):
         print(f"Run process '{self.name}'")
         print(f"About process: '{self.description}'")
-        args = register_launch_arguments()
-        df = get_data_frame_from_mongodb(args.database, args.username, args.password, args.host, args.port,
-                                         args.authenticationDatabase)
+        start_time = time()
         self.df = self._get_specific_data(df)
         self._get_specific_data_time = (time() - start_time) * 1000
         start_time = time()
         self._prepare_output_data()
-        if self.is_need_visualise:
-            self._visualize()
+        self._prepare_output_data_time = (time() - start_time) * 1000
+        if self.is_need_visualise or return_html:
+            start_time = time()
+            filename = self._visualize()
+            self._visualize_time = (time() - start_time) * 1000
+            return filename
 
     @classmethod
     def register_task(cls, task):

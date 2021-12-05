@@ -19,12 +19,14 @@ class CountingByFieldTask(BaseAnalytics):
         self.data = self.df.rdd.flatMap(lambda data: data).map(lambda data: (data, 1)).reduceByKey(add) \
             .sortBy(lambda x: x[1], ascending=False).collect()
 
-    def run_process(self):
-        super(CountingByFieldTask, self).run_process()
+    def _visualize(self):
         count = len(self.data)
-        if count < self.top_count:
-            self.top_count = None
-            print(f'Top-{count}:')
-        else:
-            print(f'Top-{self.top_count}:')
-        print(*self.data[:self.top_count], sep='\n')
+        with open("./visualizations/authors_top.txt", 'w') as f:
+            if count < self.top_count:
+                self.top_count = None
+                f.write(f'Top-{count}:\n')
+            else:
+                f.write(f'Top-{self.top_count}:\n')
+            f.writelines(list(f'{idx + 1}. {data}\n' for idx, data in enumerate(self.data[:self.top_count])))
+        return f'visualizations/authors_top.txt'
+

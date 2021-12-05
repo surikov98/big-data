@@ -50,3 +50,4 @@ class CorrelationTask(BaseAnalytics):
                           xaxis_title=self.xaxis_title, yaxis_title=self.yaxis_title)
         fig.update_yaxes(scaleanchor='x', scaleratio=1)
         fig.write_html(f'./visualizations/{self.html_file_name}')
+        return f'visualizations/{self.html_file_name}'
