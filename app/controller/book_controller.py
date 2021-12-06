@@ -10,7 +10,8 @@ from pymongo import MongoClient
 from tqdm import tqdm
 from werkzeug.datastructures import FileStorage
 
-from analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask
+from analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask, \
+    MarksAndCommentsCountsCorrelation
 
 from dump_db_to_json import delete_from_dict
 from connector import Connector
@@ -34,7 +35,13 @@ task_map = {
                              file_name='dates_correlation_task'),
     'count_books_by_year_on_litres': CountingByLitresDateTask(top_count=5,
                                                               name='Распределение количества книг по годам',
-                                                              description='', file_name='counting_by_litres_date_task')
+                                                              description='', file_name='counting_by_litres_date_task'),
+    'correlation_count_of_marks_and_count_of_comments': MarksAndCommentsCountsCorrelation(
+                                                                 xaxis_title='Ранг количества оценок',
+                                                                 yaxis_title='Ранг количества отзывов',
+                                                                 name='Корреляция колиства оценок и отзывов',
+                                                                 description='',
+                                                                 file_name='marks_comments_correlation_task')
 }
 
 
