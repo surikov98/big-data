@@ -9,14 +9,12 @@ from scipy.stats import linregress, rankdata
 class CorrelationTask(BaseAnalytics):
     __abstract__ = True
 
-    def __init__(self, name, description, xaxis_title, yaxis_title, html_file_name, is_need_visualise=True,
-                 is_ranking_corr_task=True):
-        super().__init__(name, description, is_need_visualise)
+    def __init__(self, name, description, file_name, xaxis_title, yaxis_title, is_ranking_corr_task=True):
+        super().__init__(name, description, file_name)
         self.correlation = None
         self.records = None
         self.xaxis_title = xaxis_title
         self.yaxis_title = yaxis_title
-        self.html_file_name = html_file_name
         self.is_ranking_corr_task = is_ranking_corr_task
 
     def _prepare_output_data(self):
@@ -49,5 +47,5 @@ class CorrelationTask(BaseAnalytics):
         fig.update_layout(width=1000, height=1000, title=f'Коэффициент корреляции Спирмена = {corr}',
                           xaxis_title=self.xaxis_title, yaxis_title=self.yaxis_title)
         fig.update_yaxes(scaleanchor='x', scaleratio=1)
-        fig.write_html(f'./visualizations/{self.html_file_name}')
-        return f'visualizations/{self.html_file_name}'
+        fig.write_html(f'./analytics_results/visualizations/{self.file_name}.html')
+        return [f'analytics_results/visualizations/{self.file_name}.html']

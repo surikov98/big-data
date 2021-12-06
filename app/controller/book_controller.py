@@ -1,6 +1,8 @@
 import json
 import os
 import threading
+import zipfile
+
 from flask import send_file
 from flask_restx import Namespace, Resource
 from http import HTTPStatus
@@ -24,16 +26,15 @@ THREAD_NAME = 'book_collect'
 task_map = {
     'calculate_ratings_rank_correlation': RatingsCorrelationTask(xaxis_title='Ранг рейтинга литреса',
                                                                  yaxis_title='Ранг рейтинга лайвлиба',
-                                                                 html_file_name='rating_rank_correlation.html',
                                                                  name='Корреляция рейтингов литрес и лайвлиб',
-                                                                 description=''),
+                                                                 description='', file_name='ratings_correlation_task'),
     'correlation_date_litres_and_date_writing':
         DatesCorrelationTask(xaxis_title='Ранг года выхода на Литресс', yaxis_title='Ранг года написания',
-                             html_file_name='correlation_data_litres_date_writing.html',
-                             name='Корреляция даты написания и выхода на литрес', description=''),
+                             name='Корреляция даты написания и выхода на литрес', description='',
+                             file_name='dates_correlation_task'),
     'count_books_by_year_on_litres': CountingByLitresDateTask(top_count=5,
                                                               name='Распределение количества книг по годам',
-                                                              description='')
+                                                              description='', file_name='counting_by_litres_date_task')
 }
 
 
@@ -177,6 +178,11 @@ class BooksAnalyticApi(Resource):
 
         df = get_data_frame_from_mongodb(args['database'], args['username'], args['password'], args['host'],
                                          args['port'], args['authenticationDatabase'])
-        filename = task_map[args['task_name']].run_process(df, return_html=True)
+        filenames = task_map[args['task_name']].run_process(df)
+        zip_name = f"{os.getcwd()}/analytics_results/zip/{args['task_name']}.zip"
+        zipf = zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED)
+        for filename in filenames:
+            zipf.write(f"{filename}")
+        zipf.close()
 
-        return send_file(f'{os.getcwd()}/{filename}', mimetype='text/html', as_attachment=True)
+        return send_file(zip_name, mimetype='zip', as_attachment=True)
