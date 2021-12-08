@@ -18,12 +18,10 @@ RUN apt update -y && apt-get install -y software-properties-common && \
     export JAVA_HOME && \
     apt-get clean
 
-COPY app/analytics_tasks ./analytics_tasks
-COPY app/analytics_tasks_types ./analytics_tasks_types
-COPY app/ ./app/
+COPY analytics_results ./analytics_results
+COPY app ./app
 COPY assets ./assets
-COPY visualizations ./visualizations
-COPY app/connector ./connector
+COPY checkpoints ./checkpoints
 
 COPY app_main.py ./app_main.py
 

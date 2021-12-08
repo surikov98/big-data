@@ -1,3 +1,5 @@
+import json
+
 from time import time
 
 
@@ -6,11 +8,11 @@ class BaseAnalytics:
 
     task_list = []
 
-    def __init__(self, name, description, is_need_visualise=False):
-        self.is_need_visualise = is_need_visualise
+    def __init__(self, name, description, file_name):
         self.df = None
         self.name = name
         self.description = description
+        self.file_name = file_name
         self._get_specific_data_time = None
         self._prepare_output_data_time = None
         self._visualize_time = None
@@ -24,7 +26,7 @@ class BaseAnalytics:
     def _visualize(self):
         pass
 
-    def run_process(self, df, return_html=False):
+    def run_process(self, df):
         print(f"Run process '{self.name}'")
         print(f"About process: '{self.description}'")
         start_time = time()
@@ -33,19 +35,20 @@ class BaseAnalytics:
         start_time = time()
         self._prepare_output_data()
         self._prepare_output_data_time = (time() - start_time) * 1000
-        if self.is_need_visualise or return_html:
-            start_time = time()
-            filename = self._visualize()
-            self._visualize_time = (time() - start_time) * 1000
-            return filename
+        start_time = time()
+        filenames = self._visualize()
+        self._visualize_time = (time() - start_time) * 1000
+        with open(f'./analytics_results/time_measurements/{self.file_name}_ms_time.json', 'w') as f:
+            json.dump(self.get_request_time(), f)
+            filenames.append(f'analytics_results/time_measurements/{self.file_name}_ms_time.json')
+        return filenames
 
     @classmethod
     def register_task(cls, task):
         BaseAnalytics.task_list.append(task)
 
     def get_request_time(self):
-        total_time = self._prepare_output_data_time + self._get_specific_data_time
-        total_time += self._visualize_time if self._visualize_time is not None else 0
+        total_time = self._prepare_output_data_time + self._get_specific_data_time + self._visualize_time
         return {"get_specific_data_time": self._get_specific_data_time,
                 "prepare_output_data_time": self._prepare_output_data_time, "visualize_time": self._visualize_time,
                 "total_time": total_time}

@@ -1,0 +1,11 @@
+Top-10:
+1. ('study', 8325)
+2. ('fantasy', 4186)
+3. ('classic', 2633)
+4. ('history', 2305)
+5. ('business', 2295)
+6. ('hobby', 2023)
+7. ('detectives', 1952)
+8. ('poetry', 1811)
+9. ('love_romane', 1810)
+10. ('periodics', 1471)

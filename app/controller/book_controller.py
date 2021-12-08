@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+import zipfile
 from flask import send_file, current_app
 from flask_restx import Namespace, Resource
 from flask_restx.inputs import boolean as flask_boolean
@@ -9,7 +10,8 @@ from tqdm import tqdm
 from werkzeug.datastructures import FileStorage
 
 from ..connector import Connector
-from app.analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask
+from app.analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask, \
+    MarksAndCommentsCountsCorrelation, CountingByAuthorTask, CountingByGenreTask
 from app.utils.dump_db_to_json import delete_from_dict
 from app.utils.utils import get_data_frame_from_mongodb
 
@@ -21,16 +23,29 @@ class BookDto:
 task_map = {
     'calculate_ratings_rank_correlation': RatingsCorrelationTask(xaxis_title='Ранг рейтинга литреса',
                                                                  yaxis_title='Ранг рейтинга лайвлиба',
-                                                                 html_file_name='rating_rank_correlation.html',
                                                                  name='Корреляция рейтингов литрес и лайвлиб',
-                                                                 description=''),
+                                                                 description='', file_name='ratings_correlation_task'),
     'correlation_date_litres_and_date_writing':
         DatesCorrelationTask(xaxis_title='Ранг года выхода на Литресс', yaxis_title='Ранг года написания',
-                             html_file_name='correlation_data_litres_date_writing.html',
-                             name='Корреляция даты написания и выхода на литрес', description=''),
+                             name='Корреляция даты написания и выхода на литрес', description='',
+                             file_name='dates_correlation_task'),
     'count_books_by_year_on_litres': CountingByLitresDateTask(top_count=5,
                                                               name='Распределение количества книг по годам',
-                                                              description='')
+                                                              description='', file_name='counting_by_litres_date_task',
+                                                              label='Общее количество книг по выбранным годам'),
+    'correlation_count_of_marks_and_count_of_comments': MarksAndCommentsCountsCorrelation(
+                                                                 xaxis_title='Ранг количества оценок',
+                                                                 yaxis_title='Ранг количества отзывов',
+                                                                 name='Корреляция колиства оценок и отзывов',
+                                                                 description='',
+                                                                 file_name='marks_comments_correlation_task'),
+    'get_authors_with_most_books': CountingByAuthorTask(top_count=20,
+                                                        name='Распределение количества книг по авторам',
+                                                        description='', file_name='counting_by_author_task',
+                                                        label='Общее количество книг по выбранным авторам'),
+    'get_more_popular_genres': CountingByGenreTask(top_count=10, name='Самые популярные жанры', description='',
+                                                   file_name='counting_by_genre_task',
+                                                   label='Общее количество книг по выбранным жанрам')
 }
 
 
@@ -154,6 +169,11 @@ class BooksAnalyticApi(Resource):
             api.abort(HTTPStatus.NOT_FOUND, 'Specified task not found')
 
         df = get_data_frame_from_mongodb(current_app.db_uri)
-        filename = task_map[args['task_name']].run_process(df, return_html=True)
+        filenames = task_map[args['task_name']].run_process(df)
+        zip_name = f"{os.getcwd()}/analytics_results/zip/{args['task_name']}.zip"
+        zipf = zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED)
+        for filename in filenames:
+            zipf.write(f"{filename}")
+        zipf.close()
 
-        return send_file(f'{os.getcwd()}/{filename}', mimetype='text/html', as_attachment=True)
+        return send_file(zip_name, mimetype='zip', as_attachment=True)
