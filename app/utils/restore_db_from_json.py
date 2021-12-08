@@ -1,7 +1,7 @@
 import argparse
 
-from connector import Connector
-from utils import update_argument_parser_mongodb
+from app.connector import Connector
+from app.utils.utils import update_argument_parser_mongodb
 
 
 def register_launch_arguments():

@@ -18,3 +18,4 @@ Flask-Cors
 flask-restx
 werkzeug
 python-dotenv
+uwsgi

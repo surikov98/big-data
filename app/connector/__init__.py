@@ -1,2 +1,2 @@
-from .connector import Connector, BOOKS_PER_PAGE
+from .connector import Connector
 from .errors import CaptchaError, ConnectionError, DBConnectionError

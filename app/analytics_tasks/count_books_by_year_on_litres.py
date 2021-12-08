@@ -1,4 +1,4 @@
-from analytics_tasks_types import CountingByFieldTask
+from app.analytics_tasks_types import CountingByFieldTask
 
 
 class CountingByLitresDateTask(CountingByFieldTask):

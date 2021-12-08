@@ -1,4 +1,4 @@
-from analytics_tasks_types import CorrelationTask
+from app.analytics_tasks_types import CorrelationTask
 
 
 class RatingsCorrelationTask(CorrelationTask):

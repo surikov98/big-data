@@ -27,11 +27,7 @@ def get_uri_mongodb(database: str, username: Union[str, None] = None, password: 
     return uri
 
 
-def get_data_frame_from_mongodb(database: str, username: Union[str, None] = None, password: Union[str, None] = None,
-                                host: str = 'localhost', port: Union[int, str] = 27017,
-                                authentication_database: Union[str, None] = None,
-                                update_schema: Union[dict, None] = None):
-    uri = get_uri_mongodb(database, username, password, host, port, authentication_database)
+def get_data_frame_from_mongodb(uri, update_schema: Union[dict, None] = None):
     spark = SparkSession \
         .builder \
         .master("local[*]") \

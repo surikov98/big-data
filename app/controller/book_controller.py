@@ -1,25 +1,22 @@
 import json
 import os
 import threading
-from flask import send_file
+from flask import send_file, current_app
 from flask_restx import Namespace, Resource
+from flask_restx.inputs import boolean as flask_boolean
 from http import HTTPStatus
-from pymongo import MongoClient
 from tqdm import tqdm
 from werkzeug.datastructures import FileStorage
 
-from analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask
-
-from dump_db_to_json import delete_from_dict
-from connector import Connector
-from utils import get_uri_mongodb, get_data_frame_from_mongodb
+from ..connector import Connector
+from app.analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask
+from app.utils.dump_db_to_json import delete_from_dict
+from app.utils.utils import get_data_frame_from_mongodb
 
 
 class BookDto:
     api = Namespace('book', description='Book operations')
 
-
-THREAD_NAME = 'book_collect'
 
 task_map = {
     'calculate_ratings_rank_correlation': RatingsCorrelationTask(xaxis_title='Ранг рейтинга литреса',
@@ -37,48 +34,35 @@ task_map = {
 }
 
 
-def update_argument_parser_mongodb(parser):
-    parser.add_argument('username', help='username for authentication')
-    parser.add_argument('password', help='password for authentication')
-    parser.add_argument('database', help='database to connect to', required=True)
-    parser.add_argument('host', help='server to connect to', default='localhost')
-    parser.add_argument('port', help='port to connect to', default=27017)
-    parser.add_argument('authenticationDatabase', help='user source')
-
-
 api = BookDto.api
 
 _collect_parser = api.parser()
-update_argument_parser_mongodb(_collect_parser)
 
-_collect_parser.add_argument('start_page', help='start book page (from 1)', type=int, default=1)
-_collect_parser.add_argument('end_page', help='end book page', type=int)
-_collect_parser.add_argument('start_book', help='start book index', type=int, default=1)
-_collect_parser.add_argument('end_book', help='end book index', type=int, default=50)
-_collect_parser.add_argument('clear_database', help='clear database', action='store_true')
+_collect_parser.add_argument('start_page', help='start book page (from 1). Only for selenium', type=int, default=1)
+_collect_parser.add_argument('end_page', help='end book page. Only for selenium', type=int)
+_collect_parser.add_argument('start_index', help='start book index. Only for reading from file', type=int, default=-1)
+_collect_parser.add_argument('clear_database', type=flask_boolean, help='clear database', default=False)
 _collect_parser.add_argument('links_file', type=FileStorage, help='File txt with book links', location='files')
 
-_db_parser = api.parser()
-update_argument_parser_mongodb(_db_parser)
-
 _dump_parser = api.parser()
-update_argument_parser_mongodb(_dump_parser)
-_dump_parser.add_argument('clear_database', help='clear database', action='store_true')
+_dump_parser.add_argument('clear_database', type=flask_boolean, help='clear database', default=False)
 _dump_parser.add_argument('dump_file', type=FileStorage, help='Database dump file', location='files',
                           required=True)
 
 _analytic_parser = api.parser()
-update_argument_parser_mongodb(_analytic_parser)
 _analytic_parser.add_argument('task_name', help='Analytic task name', type=str,
                               choices=list(task_map.keys()),
                               required=True)
 
 
 def collect(args, source_file=None):
-    connector = Connector(args['database'], args['username'], args['password'], args['host'], args['port'],
-                          args['authenticationDatabase'])
-    connector.collect(args['start_page'], args['end_page'], args['start_book'], args['end_book'],
-                      args['clear_database'], source_file=source_file, server_side=True)
+    from app_main import app
+
+    with app.app_context():
+        open(app.config['LOCK_NAME'], 'w')
+        connector = Connector()
+        connector.collect(args['start_page'], args['end_page'], args['start_index'], args['clear_database'],
+                          source_file=source_file, server_side=True)
     try:
         os.remove(source_file)
     except Exception:
@@ -101,23 +85,24 @@ class BooksCollectApi(Resource):
             file.save('./assets/all_links_tmp.txt')
             source_file = './assets/all_links_tmp.txt'
 
-        th = threading.Thread(target=collect, name=THREAD_NAME, args=(args, source_file))
+        th = threading.Thread(target=collect, args=(args, source_file))
         th.start()
 
         return 'Started collecting'
 
     @api.doc('get_books_count')
-    @api.expect(_db_parser)
     def get(self):
         """Get current books count in database"""
-        args = _db_parser.parse_args()
-        uri = get_uri_mongodb(args['database'], args['username'], args['password'], args['host'], args['port'],
-                              args['authenticationDatabase'])
-        client = MongoClient(uri)
-        db = client.get_database()
-        books = db.books.find()
+        books = current_app.db.books.find()
         count = books.count()
         return {'count': count}
+
+    @api.doc('stop_collect')
+    def delete(self):
+        """Stop current collecting process"""
+        if os.path.exists(current_app.config['LOCK_NAME']):
+            os.remove(current_app.config['LOCK_NAME'])
+        return "Stopped collecting"
 
 
 @api.route('/dump')
@@ -127,24 +112,17 @@ class BooksDumpApi(Resource):
     def post(self):
         """Load json dump into database"""
         args = _dump_parser.parse_args()
-        connector = Connector(args['database'], args['username'], args['password'], args['host'], args['port'],
-                              args['authenticationDatabase'])
-        dump_path = './assets/dump_tmp.json'
+        connector = Connector()
+        dump_path = './assets/tmp_dump.json'
         args['dump_file'].save(dump_path)
         connector.connect_from_file(dump_path, args['clear_database'])
         os.remove(dump_path)
         return 'Success'
 
     @api.doc('get_dump')
-    @api.expect(_db_parser)
     def get(self):
         """Get database json dump"""
-        args = _db_parser.parse_args()
-        uri = get_uri_mongodb(args['database'], args['username'], args['password'], args['host'], args['port'],
-                              args['authenticationDatabase'])
-        client = MongoClient(uri)
-        db = client.get_database()
-        books = db.books.find()
+        books = current_app.db.books.find()
         count = books.count()
 
         dump_path = 'assets/dump.json'
@@ -175,8 +153,7 @@ class BooksAnalyticApi(Resource):
         if args['task_name'] not in task_map:
             api.abort(HTTPStatus.NOT_FOUND, 'Specified task not found')
 
-        df = get_data_frame_from_mongodb(args['database'], args['username'], args['password'], args['host'],
-                                         args['port'], args['authenticationDatabase'])
+        df = get_data_frame_from_mongodb(current_app.db_uri)
         filename = task_map[args['task_name']].run_process(df, return_html=True)
 
         return send_file(f'{os.getcwd()}/{filename}', mimetype='text/html', as_attachment=True)

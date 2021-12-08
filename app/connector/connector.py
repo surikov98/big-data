@@ -1,118 +1,46 @@
 import json
 import os
+import re
 import requests
 import time
-from http import HTTPStatus
+from flask import current_app
 from bs4 import BeautifulSoup
 from itertools import islice
-from lxml.html import fromstring
-from pymongo import MongoClient
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 from typing import Union
 from tqdm import tqdm
 
-from utils import get_uri_mongodb
 from .anticaptcha import process_captcha
 from .errors import CaptchaError, ConnectionError, DBConnectionError
 from .insert_buffer import InsertBuffer
-from .request import Request
-
-import re
-
-BASE_URL = 'https://www.litres.ru'
-BOOKS_PER_PAGE = 50
-
-_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                  'Chrome/85.0.4183.121 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'ru,en-us;q=0.7,en;q=0.3',
-    'Accept-Encoding': 'deflate',
-    'Accept-Charset': 'windows-1251,utf-8;q=0.7,*;q=0.7',
-    'Keep-Alive': '300',
-    'Connection': 'keep-alive',
-    'Referer': 'https://www.litres.ru/',
-    'Cookie': 'user-geo-region-id=2; user-geo-country-id=2; desktop_session_key=a879d130e3adf0339260b581e66d773df11'
-              'd8e9d3c7ea1053a6a7b473c166afff28b4d6c3e80e91249baaa7f3c3e90ef898a714ba131694d595c6a4f7e8f6df19d46c31'
-              'ce10d2837ff5ad61d138aefd65c01aa7acc1327ce6d0918deae0a3c71; '
-              'desktop_session_key.sig=drC4D-uw685k9LLTsxPhIFVyLFY; '
-              'i=Hn0YWarMxO/96XpUg9b7btBjrSjo+ItWSfeOXC4oUOtwp6TEcbOkk/ajoJbz1xD/0dPkdWRcJTTk3x1/kZ09uNlji8g=; '
-              'mda_exp_enabled=1; sso_status=sso.passport.yandex.ru:blocked; yandex_plus_metrika_cookie=true; '
-              '_ym_wasSynced=%7B%22time%22%3A1604668139580%2C%22params%22%3A%7B%22eu%22%3A0%7D%2C%22bkParams%22%3A%'
-              '7B%7D%7D; gdpr=0; _ym_uid=1604668140171070080; _ym_d=1604668140; mda=0; _ym_isad=1; '
-              '_ym_visorc_56177992=b; _ym_visorc_52332406=b; _ym_visorc_22663942=b; location=1',
-}
-
-_BUFFER_SIZE = BOOKS_PER_PAGE
-_HREF_CHECKPOINT = './assets/checkpoint_href.txt'
-_DB_CHECKPOINT = './assets/checkpoint_db.txt'
 
 
 class Connector:
-    def __init__(self, database: str, username: Union[str, None] = None,
-                 password: Union[str, None] = None, host: str = 'localhost', port: Union[int, str] = 27017,
-                 authentication_database: Union[str, None] = None, sorting: Union[str, None] = None):
-        self._username = username
-        self._password = password
-        self._database = database
-        self._host = host
-        self._port = port
-        self._authentication_database = authentication_database
+    def __init__(self, sorting: Union[str, None] = None):
         self._sorting = sorting
         self._log_file = None
-        self._request = Request(_HEADERS)
-        self._db = None
+        self._db = current_app.db
         self._book_buffer = None
-        self._start_book_page = self._end_book_page = self._start_book = self._end_book = None
-        self._current_book_page = self._current_book = None
-        self._pages_count = None
+        self._start_book_page = self._end_book_page = None
+        self._start_book_index = None
         self._book_links = None
         self._current_page_link = None
         self._current_page_number = None
         self._file_with_href = None
         self._current_book_index = 0
-
-        self._check_fields()
-
-    @property
-    def current_book_page(self):
-        return self._current_book_page
+        self.buffer_size = current_app.config['BOOKS_PER_PAGE']
 
     @property
     def current_book(self):
         return self._current_book
 
-    def _check_fields(self):
-        field_types = {
-            '_username': [str, type(None)],
-            '_password': [str, type(None)],
-            '_database': [str],
-            '_host': [str],
-            '_port': [int, str],
-            '_authentication_database': [str, type(None)],
-            '_sorting': [str, type(None)]
-        }
-        for field, types in field_types.items():
-            value = getattr(self, field)
-            if not any(isinstance(value, type_) for type_ in types):
-                raise TypeError(f"Field '{field[1:]}' must have type{'s' if len(types) > 1 else ''} "
-                                f"{', '.join(map(lambda type_: type_.__name__, types[:-1]))}"
-                                f"{' or ' if len(types) > 1 else ''}{types[-1].__name__}, not {type(value).__name__}")
-        if self._username is not None and self._password is None:
-            raise TypeError(f"Field 'password' must have type str, not NoneType")
-
     def _init_database(self, is_clear_database):
-        uri = get_uri_mongodb(self._database, self._username, self._password, self._host, self._port,
-                              self._authentication_database)
-        client = MongoClient(uri)
-        self._db = client.get_database()
-
         try:
             collections = self._db.collection_names()
             if 'books' in collections and is_clear_database:
-                self._db.books.delete_many({})
+                self._db.books.drop()
             elif 'books' not in collections:
                 self._db.create_collection('books')
         except Exception as e:
@@ -123,21 +51,7 @@ class Connector:
                 self._book_links = set(book['key'] for book in self._db.books.find())
         except Exception as e:
             raise DBConnectionError('data from database initialization failed') from None
-        self._book_buffer = InsertBuffer(self._db.books, _BUFFER_SIZE, self._update_log)
-
-    def _make_request(self, url):
-        response = self._request.get(url)
-        if response.status_code == HTTPStatus.OK:
-            content = response.content.decode(response.encoding)
-            if 'captcha' in content:
-                raise CaptchaError
-            page = fromstring(content)
-            return page
-        elif response.status_code == HTTPStatus.NOT_FOUND:
-            self._update_log(f'Page {url} not found')
-            return None
-        else:
-            raise Exception(f'Unknown error: {response.status_code}; {response.text}')
+        self._book_buffer = InsertBuffer(self._db.books, self.buffer_size, self._update_log)
 
     def __check_exists_captcha(self, driver):
         try:
@@ -147,15 +61,21 @@ class Connector:
             return False
 
     def _get_book_links(self, get_new_electronic_russian_book=True, server_side=False):
-        with open(_HREF_CHECKPOINT, 'r') as checkpoint_file:
-            self._current_page_link = checkpoint_file.readline().strip()
-            self._current_page_number = int(checkpoint_file.readline())
+        try:
+            with open(current_app.config['HREF_CHECKPOINT'], 'r') as checkpoint_file:
+                self._current_page_link = checkpoint_file.readline().strip()
+                self._current_page_number = int(checkpoint_file.readline())
+        except Exception:
+            pass
+        if self._start_book_page:
+            self._current_page_number = self._start_book_page
 
         options = webdriver.FirefoxOptions()
         if server_side:
             options.add_argument('--headless')
 
-        driver = webdriver.Firefox(executable_path='./assets/geckodriver', options=options)
+        driver = webdriver.Firefox(executable_path='./assets/geckodriver', service_log_path='./logs/geckodriver.log',
+                                   options=options)
 
         while True:
             try:
@@ -183,6 +103,8 @@ class Connector:
                 print('Go to the next page...')
 
             self._current_page_number += 1
+            if self._end_book_page and self._current_page_number >= self._end_book_page:
+                break
 
             if get_new_electronic_russian_book:
                 self._current_page_link = f"https://www.litres.ru/novie/elektronnie-knigi" \
@@ -203,9 +125,7 @@ class Connector:
         return float(re.sub(prefix, '', s).strip().replace(',', '.')[:-2].replace(' ', ''))
 
     def _get_book(self, book_key):
-        # TODO: fix bug with _make_request, text in book_data is None
-        # book_data = self._make_request(f'{BASE_URL}{book_key}')
-        book_data = requests.get(f'{BASE_URL}{book_key}')
+        book_data = requests.get(f'{current_app.config["BASE_URL"]}{book_key}')
         if book_data is None:
             self._update_log(f"Can't find information about book {book_key}")
             return None
@@ -387,22 +307,15 @@ class Connector:
         if self._log_file is not None:
             print(log_message, file=self._log_file, flush=True)
 
-    def _process_db_connection_error(self, buffer_size=_BUFFER_SIZE):
+    def _process_db_connection_error(self, buffer_size=None):
+        if buffer_size is None:
+            buffer_size = self.buffer_size
         # does not take into account unexpected repetitions and skips of books
-        successful_books = BOOKS_PER_PAGE * (self._current_book_page - self._start_book_page) - self._start_book + 1 \
-                           + self._current_book - buffer_size
-        previous_books = BOOKS_PER_PAGE * (self._start_book_page - 1) + self._start_book - 1
-        all_books = successful_books + previous_books
-        last_successful_page = all_books // BOOKS_PER_PAGE
-        last_successful_book = all_books % BOOKS_PER_PAGE
+        successful_books = buffer_size * (self._current_page_number - self._start_book_page - 1)
         if successful_books == 0:
             self._update_log('No successful inserts in database')
-        elif last_successful_book > 0:
-            self._update_log(f'Last successful insert in database: page {last_successful_page + 1}, '
-                             f'book {last_successful_book} ({successful_books} books)')
-        else:
-            self._update_log(f'Last successful insert in database: page {last_successful_page}, book {BOOKS_PER_PAGE} '
-                             f'({successful_books} books)')
+        elif self._current_page_number > 0:
+            self._update_log(f'Last successful insert in database: page {self._current_page_number + 1}')
 
     def _flush_buffer(self):
         try:
@@ -416,19 +329,20 @@ class Connector:
             self._log_file.close()
             self._log_file = None
 
-    def _collect(self, start_book_page, end_book_page, start_book, end_book, source_file, server_side):
+    def _collect(self, start_book_page, end_book_page, source_file, server_side):
         self._start_book_page = start_book_page
         self._end_book_page = end_book_page
-        self._start_book = start_book
-        self._end_book = end_book
 
         generator = self._get_book_links_from_file(source_file) if source_file else \
             self._get_book_links(server_side=server_side)
 
         try:
             for book_link in generator:
+                if server_side and not os.path.exists(current_app.config['LOCK_NAME']):
+                    raise KeyboardInterrupt("Aborted")
+
                 book_link = book_link.strip()
-                book_key = book_link.replace(BASE_URL, '')
+                book_key = book_link.replace(current_app.config['BASE_URL'], '')
                 print(f"{self._current_book_index}: {book_link}", end='\r')
                 self._current_book_index += 1
                 if book_key in self._book_links:
@@ -447,7 +361,7 @@ class Connector:
             if self._file_with_href is not None:
                 self._file_with_href.close()
             raise exc from None
-        except (ConnectionError, ValueError, CaptchaError, KeyboardInterrupt, Exception) as exc:
+        except (ConnectionError, ValueError, KeyboardInterrupt, Exception) as exc:
             self._flush_buffer()
             if self._file_with_href is not None:
                 self._file_with_href.close()
@@ -455,8 +369,8 @@ class Connector:
 
         self._flush_buffer()
 
-    def collect(self, start_book_page: int = 1, end_book_page: Union[int, None] = None, start_book: int = 1,
-                end_book: int = BOOKS_PER_PAGE, is_clear_database: bool = True, log_file_path: Union[str, None] = None,
+    def collect(self, start_book_page: int = 1, end_book_page: Union[int, None] = None, start_book_index: int = -1,
+                is_clear_database: bool = True, log_file_path: Union[str, None] = None,
                 source_file: Union[str, None] = None, server_side: bool = False):
         if log_file_path is not None:
             self._log_file = open(log_file_path, 'w')
@@ -467,27 +381,28 @@ class Connector:
 
         start_book_page = max(start_book_page, 1)
         end_book_page = end_book_page
-        start_book = max(start_book, 1)
-        end_book = min(max(end_book, 1), BOOKS_PER_PAGE)
         if end_book_page is not None and start_book_page > end_book_page:
             self._close_log_file()
             return
 
-        if os.path.exists(_DB_CHECKPOINT):
-            with open(_DB_CHECKPOINT, 'r') as checkpoint_file:
+        if source_file and os.path.exists(current_app.config['DB_CHECKPOINT']):
+            with open(current_app.config['DB_CHECKPOINT'], 'r') as checkpoint_file:
                 try:
                     self._current_book_index = int(checkpoint_file.readline())
                 except Exception:
                     pass
 
+        if start_book_index >= 0:
+            self._current_book_index = start_book_index
+
         try:
-            self._collect(start_book_page, end_book_page, start_book, end_book, source_file, server_side)
+            self._collect(start_book_page, end_book_page, source_file, server_side)
             self._close_log_file()
         except DBConnectionError:
             self._close_log_file()
             raise
         except (ConnectionError, ValueError, CaptchaError, KeyboardInterrupt, Exception):
-            with open(_DB_CHECKPOINT, 'w') as checkpoint_file:
+            with open(current_app.config['DB_CHECKPOINT'], 'w') as checkpoint_file:
                 checkpoint_file.write(str(self._current_book_index))
             self._close_log_file()
             raise
@@ -538,7 +453,7 @@ class Connector:
         profile.set_preference("browser.helperApps.neverAsk.saveToDisk", 'text/plain')  # need than don't open dialog window for download TXT
         browser = webdriver.Firefox(profile)
 
-        browser.get(BASE_URL)
+        browser.get(current_app.config['BASE_URL'])
         self.__authorize_by_email(browser, 'some_email@mail.ru', 'password')
 
         for book_link in generator:
@@ -606,7 +521,7 @@ class Connector:
             if self._current_book == 0:
                 self._update_log('No successful inserts in database')
             else:
-                successful_books = (self._current_book // _BUFFER_SIZE) * _BUFFER_SIZE
+                successful_books = (self._current_book // self.buffer_size) * self.buffer_size
                 self._update_log(f'{successful_books} successful books in database')
             raise exc from None
         except (KeyboardInterrupt, Exception) as exc:
@@ -616,7 +531,7 @@ class Connector:
         self._flush_buffer()
 
     def connect_from_file(self, filename: str, is_clear_database: bool = True):
-        self._log_file = open('connect_from_file.log', 'w')
+        self._log_file = open('./logs/connect_from_file.log', 'w')
         self._init_database(is_clear_database)
 
         if isinstance(filename, str):

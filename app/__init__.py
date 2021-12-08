@@ -2,6 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 from . import controller
 from .config import config_by_name
+from .db import init_db
 
 
 def create_flask_app(config_name):
@@ -15,4 +16,5 @@ def create_app(config_name):
     app = create_flask_app(config_name)
     CORS(app, resources={r'/*': {'origins': '*'}}, supports_credentials=True)
     controller.init_app(app)
+    init_db(app)
     return app

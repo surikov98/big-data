@@ -1,0 +1,28 @@
+version: "3.6"
+
+services:
+  db:
+    image: mongo
+    restart: unless-stopped
+    container_name: mongo
+    env_file:
+      - ./db.env
+    networks:
+      - api
+
+  api:
+    build: ./
+    container_name: api
+    volumes:
+      - ${LOG_PATH}:/usr/src/app/logs:rw
+    env_file:
+      - ./api.env
+    ports:
+      - 5000:5000
+    restart: always
+    networks:
+      - api
+
+networks:
+  api:
+    external: false

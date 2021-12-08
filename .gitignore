@@ -5,7 +5,12 @@ __pycache__/
 
 # C extensions
 *.so
+*.log
+*.env
+*.lock
+*tmp.*
 
+*geckodriver
 *dump.json
 
 # Distribution / packaging
@@ -130,7 +135,6 @@ dmypy.json
 .pyre/
 
 .idea
-connect.log
 books.json
 run.sh
 **/build/*

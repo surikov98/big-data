@@ -4,7 +4,7 @@ import json
 from pymongo import MongoClient
 from tqdm import tqdm
 
-from utils import get_uri_mongodb, update_argument_parser_mongodb
+from app.utils.utils import get_uri_mongodb, update_argument_parser_mongodb
 
 
 def register_launch_arguments():

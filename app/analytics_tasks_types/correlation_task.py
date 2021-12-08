@@ -1,9 +1,10 @@
 import plotly.graph_objects as go
 
-from .base_analytics import BaseAnalytics
 from pyspark.mllib.stat import Statistics
-from plotly_scatter_confidence_ellipse import confidence_ellipse
 from scipy.stats import linregress, rankdata
+
+from .base_analytics import BaseAnalytics
+from app.utils.plotly_scatter_confidence_ellipse import confidence_ellipse
 
 
 class CorrelationTask(BaseAnalytics):

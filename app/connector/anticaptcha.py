@@ -1,6 +1,6 @@
 import time
-import json
 
+from flask import current_app
 from python_anticaptcha import AnticaptchaClient, NoCaptchaTaskProxylessTask
 
 
@@ -34,17 +34,14 @@ def get_sitekey(driver):
 
 
 def process_captcha(driver):
-    with open("./assets/anticaptcha_config.json", "r") as read_file:
-        config = json.load(read_file)
-
-    api_key = config["api_key"]
+    api_key = current_app.config["ANTICAPTCHA_TOKEN"]
     url = driver.current_url
     client = AnticaptchaClient(api_key)
     invisible_captcha = True
 
     site_key = get_sitekey(driver)
     print("Found site-key", site_key)
-    token = get_token(url, site_key, invisible_captcha, client, config["timeout"])
+    token = get_token(url, site_key, invisible_captcha, client, current_app.config["ANTICAPTCHA_TIMEOUT"])
     if not token:
         return False
     print("Found token", token)
