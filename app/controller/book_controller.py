@@ -11,7 +11,7 @@ from tqdm import tqdm
 from werkzeug.datastructures import FileStorage
 
 from analytics_tasks import RatingsCorrelationTask, DatesCorrelationTask, CountingByLitresDateTask, \
-    MarksAndCommentsCountsCorrelation, CountingByAuthorTask
+    MarksAndCommentsCountsCorrelation, CountingByAuthorTask, CountingByGenreTask
 
 from dump_db_to_json import delete_from_dict
 from connector import Connector
@@ -44,7 +44,9 @@ task_map = {
                                                                  file_name='marks_comments_correlation_task'),
     'get_authors_with_most_books': CountingByAuthorTask(top_count=20,
                                                         name='Распределение количества книг по авторам',
-                                                        description='', file_name='counting_by_author_task')
+                                                        description='', file_name='counting_by_author_task'),
+    'get_more_popular_genres': CountingByGenreTask(top_count=10, name='Самые популярные жанры', description='',
+                                                   file_name='counting_by_genre_task')
 }
 
 
