@@ -35,7 +35,8 @@ task_map = {
                              file_name='dates_correlation_task'),
     'count_books_by_year_on_litres': CountingByLitresDateTask(top_count=5,
                                                               name='Распределение количества книг по годам',
-                                                              description='', file_name='counting_by_litres_date_task'),
+                                                              description='', file_name='counting_by_litres_date_task',
+                                                              label='Общее количество книг по выбранным годам'),
     'correlation_count_of_marks_and_count_of_comments': MarksAndCommentsCountsCorrelation(
                                                                  xaxis_title='Ранг количества оценок',
                                                                  yaxis_title='Ранг количества отзывов',
@@ -44,9 +45,11 @@ task_map = {
                                                                  file_name='marks_comments_correlation_task'),
     'get_authors_with_most_books': CountingByAuthorTask(top_count=20,
                                                         name='Распределение количества книг по авторам',
-                                                        description='', file_name='counting_by_author_task'),
+                                                        description='', file_name='counting_by_author_task',
+                                                        label='Общее количество книг по выбранным авторам'),
     'get_more_popular_genres': CountingByGenreTask(top_count=10, name='Самые популярные жанры', description='',
-                                                   file_name='counting_by_genre_task')
+                                                   file_name='counting_by_genre_task',
+                                                   label='Общее количество книг по выбранным жанрам')
 }
 
 
